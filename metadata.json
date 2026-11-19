@@ -1,0 +1,6 @@
+{
+  "name": "Titan Quant Matrix | Autonomous Trading Bridge & Ecosystem",
+  "description": "Next-generation institutional trading terminal unifying autonomous capital preservation, real-time DMA MT5 bridge, EasyWay2Trade bots, Emerge prop evaluations, EA-Connect, and high-level production scripts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
