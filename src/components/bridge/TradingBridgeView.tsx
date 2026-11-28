@@ -74,17 +74,17 @@ export const TradingBridgeView: React.FC<TradingBridgeViewProps> = ({ onOpenOrde
 
   // Download real MQL5 Expert Advisor file
   const handleDownloadMT5BridgeEA = () => {
+    const bridgeEndpoint =
+      typeof window !== 'undefined' ? `${window.location.origin}/api/mt5/bridge` : 'http://localhost:3000/api/mt5/bridge';
     const code = `//+------------------------------------------------------------------+
 //|                                        AlgoTrade_Matrix_Bridge.mq5|
 //|                        Copyright 2026, AlgoTrade Matrix Ecosystem|
-//|                                  https://algotradematrix.io       |
 //+------------------------------------------------------------------+
 #property copyright "AlgoTrade Matrix Ecosystem"
-#property link      "https://algotradematrix.io"
 #property version   "4.80"
 #property strict
 
-input string InpBridgeURL    = "https://YOUR_APP_URL/api/mt5/bridge";
+input string InpBridgeURL    = "${bridgeEndpoint}";
 input string InpSecretToken  = "sec_bridge_live_883921";
 input double InpMaxSlippage  = 2.0;
 
@@ -139,7 +139,7 @@ void OnTick() {
   // Copy webhook URL helper
   const handleCopyWebhookUrl = () => {
     const bridgeUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/mt5/bridge` : '/api/mt5/bridge';
-    navigator.clipboard.writeText(bridgeUrl);
+    void navigator.clipboard?.writeText(bridgeUrl).catch(() => undefined);
     setCopiedWebhookUrl(true);
     setTimeout(() => setCopiedWebhookUrl(false), 2000);
   };
@@ -217,10 +217,10 @@ void OnTick() {
       {/* Top Real-time Account & Bridge Telemetry Deck */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* Account Equity */}
-        <div className="obsidian-panel hud-bracket rounded-xl p-3.5 relative overflow-hidden">
+        <div className="obsidian-panel rounded-xl p-3.5 relative overflow-hidden">
           <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center justify-between">
             <span>Account Equity</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-none" />
           </div>
           <div className="text-xl font-black text-slate-100 font-mono mt-1 tracking-tight">
             ${accountEquity.toLocaleString('en-US', { minimumFractionDigits: 2 })}
@@ -232,7 +232,7 @@ void OnTick() {
         </div>
 
         {/* Floating PnL */}
-        <div className={`obsidian-panel hud-bracket rounded-xl p-3.5 relative overflow-hidden ${
+        <div className={`obsidian-panel rounded-xl p-3.5 relative overflow-hidden ${
           unrealizedPnL >= 0 ? 'border-emerald-500/30' : 'border-rose-500/30'
         }`}>
           <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center justify-between">
@@ -255,7 +255,7 @@ void OnTick() {
         </div>
 
         {/* Free Margin */}
-        <div className="obsidian-panel hud-bracket rounded-xl p-3.5 relative overflow-hidden">
+        <div className="obsidian-panel rounded-xl p-3.5 relative overflow-hidden">
           <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Free Margin</div>
           <div className="text-xl font-black text-cyan-400 font-mono mt-1 tracking-tight">
             ${freeMargin.toLocaleString('en-US', { minimumFractionDigits: 2 })}
@@ -267,7 +267,7 @@ void OnTick() {
         </div>
 
         {/* Used Margin */}
-        <div className="obsidian-panel hud-bracket rounded-xl p-3.5 relative overflow-hidden">
+        <div className="obsidian-panel rounded-xl p-3.5 relative overflow-hidden">
           <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Used Margin</div>
           <div className="text-xl font-black text-amber-400 font-mono mt-1 tracking-tight">
             ${usedMargin.toLocaleString('en-US', { minimumFractionDigits: 2 })}
@@ -279,10 +279,10 @@ void OnTick() {
         </div>
 
         {/* Direct Bridge Latency */}
-        <div className="obsidian-panel hud-bracket rounded-xl p-3.5 relative overflow-hidden">
+        <div className="obsidian-panel rounded-xl p-3.5 relative overflow-hidden">
           <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center justify-between">
             <span>DMA Ping</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
           </div>
           <div className="text-xl font-black text-emerald-400 font-mono mt-1 tracking-tight flex items-baseline gap-1">
             <span>{bridgeLatencyMs}</span>
@@ -297,7 +297,7 @@ void OnTick() {
         <div className="obsidian-panel rounded-xl p-3.5 relative overflow-hidden bg-rose-950/20 border-rose-500/30 flex flex-col justify-between">
           <div className="flex items-center justify-between text-[10px] text-rose-300 font-bold uppercase tracking-wider">
             <span>Circuit Breaker</span>
-            <AlertTriangle className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
+            <AlertTriangle className="w-3.5 h-3.5 text-rose-400 animate-none" />
           </div>
           <button
             onClick={() => setIsKillSwitchOpen(true)}
@@ -310,10 +310,10 @@ void OnTick() {
       </div>
 
       {/* Live Market Watch & Fast Execution Strip */}
-      <div className="obsidian-panel hud-bracket rounded-2xl p-4 shadow-2xl relative">
+      <div className="obsidian-panel rounded-2xl p-4 shadow-2xl relative">
         <div className="flex items-center justify-between mb-3 border-b border-white/[0.06] pb-2.5">
           <div className="flex items-center gap-2">
-            <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
+            <Radio className="w-4 h-4 text-emerald-400 animate-none" />
             <h3 className="text-xs font-black text-slate-200 uppercase tracking-widest font-mono">
               Live Interbank Market Watch & Execution Matrix
             </h3>
@@ -390,7 +390,7 @@ void OnTick() {
       <div className="obsidian-panel rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 font-mono text-xs border border-cyan-500/30 shadow-lg">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400">
-            <Radio className="w-4 h-4 animate-pulse" />
+            <Radio className="w-4 h-4 animate-none" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -426,7 +426,7 @@ void OnTick() {
       />
 
       {/* Main Trading Bridge Tabs & Content */}
-      <div className="obsidian-panel hud-bracket rounded-2xl shadow-2xl overflow-hidden relative border border-white/[0.08]">
+      <div className="obsidian-panel rounded-2xl shadow-2xl overflow-hidden relative border border-white/[0.08]">
         {/* Navigation Tabs */}
         <div className="px-3 sm:px-5 border-b border-white/[0.08] bg-black/40 backdrop-blur-md flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
           <div className="flex items-center gap-1.5 py-2.5 shrink-0">
@@ -540,7 +540,7 @@ void OnTick() {
                       </div>
 
                       {/* Card Price Grid */}
-                      <div className="grid grid-cols-2 gap-2 p-2.5 bg-[#0a0d14] rounded-lg text-[11px] text-slate-400">
+                      <div className="grid grid-cols-2 gap-2 p-2.5 bg-[#090C12] rounded-lg text-[11px] text-slate-400">
                         <div>
                           <span className="text-[10px] text-slate-500 block">Entry → Current</span>
                           <span className="text-slate-200">{pos.openPrice} → {pos.currentPrice}</span>
@@ -758,7 +758,7 @@ void OnTick() {
                           <span className="text-amber-400 font-bold text-sm">@ {ord.targetPrice}</span>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2 p-2.5 bg-[#0a0d14] rounded-lg text-[11px] text-slate-400">
+                        <div className="grid grid-cols-2 gap-2 p-2.5 bg-[#090C12] rounded-lg text-[11px] text-slate-400">
                           <div>
                             <span className="text-[10px] text-slate-500 block">Current Price</span>
                             <span className="text-slate-200">{ord.currentPrice}</span>
@@ -964,7 +964,7 @@ void OnTick() {
             <div className="bg-[#121622] border border-cyan-800/40 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
                   <h4 className="text-sm font-bold text-slate-100 uppercase tracking-wider font-mono">
                     TradingView & Python Signal Webhook Gateway
                   </h4>
@@ -1088,7 +1088,7 @@ void OnTick() {
                     rows={8}
                     value={webhookPayload}
                     onChange={(e) => setWebhookPayload(e.target.value)}
-                    className="w-full bg-[#0a0d14] border border-slate-700/80 rounded-xl p-3 text-xs font-mono text-cyan-300 focus:outline-none focus:border-cyan-400"
+                    className="w-full bg-[#090C12] border border-slate-700/80 rounded-xl p-3 text-xs font-mono text-cyan-300 focus:outline-none focus:border-cyan-400"
                   />
                 </div>
 
@@ -1118,7 +1118,7 @@ void OnTick() {
               <div className="bg-[#111622] border border-slate-800 rounded-xl p-5 flex flex-col">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                    <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
+                    <Radio className="w-4 h-4 text-emerald-400 animate-none" />
                     <span>Live Bridge Execution Log</span>
                   </h4>
                   <button

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useTrading } from '../../context/TradingContext';
+import { useBrand } from '../../context/BrandContext';
 import { OrderSide } from '../../types/trading';
 import { auth, getAccessToken, signInWithGoogleWorkspace } from '../../lib/firebase';
 import { signOut, onAuthStateChanged, User } from 'firebase/auth';
@@ -73,6 +74,7 @@ export interface SMCSignal {
 }
 
 export const LiquidityEdgeEAView: React.FC = () => {
+  const { brand } = useBrand();
   const {
     prices,
     executeOrder,
@@ -350,7 +352,9 @@ export const LiquidityEdgeEAView: React.FC = () => {
           pnl: 0,
           botSource: 'LIQUIDITY_EDGE',
         }),
-      }).catch(() => {});
+      }).catch((err: unknown) => {
+        console.warn('Execution persistence deferred:', err instanceof Error ? err.message : err);
+      });
     }
   };
 
@@ -389,7 +393,9 @@ export const LiquidityEdgeEAView: React.FC = () => {
           pnl: 0,
           botSource: 'LIQUIDITY_EDGE',
         }),
-      }).catch(() => {});
+      }).catch((err: unknown) => {
+        console.warn('Sniper execution persistence deferred:', err instanceof Error ? err.message : err);
+      });
     }
   };
 
@@ -477,8 +483,8 @@ export const LiquidityEdgeEAView: React.FC = () => {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          recipient: 'thulanimyeni19712@gmail.com',
-          subject: `[LIQUIDITY EDGE] Sweep Purged on ${selectedSymbol}`,
+          recipient: brand.ownerEmail,
+          subject: `[${brand.brandName}] Sweep Purged on ${selectedSymbol}`,
           body: `Liquidity sweep confirmed on ${selectedSymbol} at ${currentMarket.bid}. Position executed.`,
         }),
       });
@@ -497,14 +503,14 @@ export const LiquidityEdgeEAView: React.FC = () => {
     }
   };
 
-  // MQL5 code snippet for Liquidity Edge EA v4.2 Pro
+  // MQL5 code snippet for Sovereign Liquidity Sweep v4.2 Pro
   const mql5Code = `//+------------------------------------------------------------------+
-//|                                           LiquidityEdgeEA_v4.mq5 |
-//|                       Copyright 2026, Liquidity Edge EA Official |
-//|                                  "Get Automated: 077 600 4742"   |
+//|                                       SovereignSweepEA_v4.mq5    |
+//|                       Copyright 2026, ${brand.ownerEntity}
+//|                                    Owner: ${brand.ownerName}
 //+------------------------------------------------------------------+
-#property copyright "Liquidity Edge EA (Official: 077 600 4742)"
-#property link      "https://wa.me/27776004742"
+#property copyright "${brand.brandName} · ${brand.ownerEntity}"
+#property link      "mailto:${brand.ownerEmail}"
 #property version   "4.20"
 #property description "Automated Liquidity Sweeps, Asian Range Grabs, FVG & Order Blocks"
 
@@ -513,7 +519,7 @@ CTrade trade;
 
 //--- INPUT PARAMETERS
 input group "=== BOT LICENSING & RISK ==="
-input string   InpLicenseKey         = "LE-SA-077-600-4742-GOLD"; // License Key
+input string   InpLicenseKey         = "APX-SOV-MYENI-GOLD-V4";  // License Key
 input double   InpRiskPercent        = 0.50;                     // Risk Per Trade (%)
 input double   InpMicroAccountGuard  = 0.30;                     // Micro Capital Floor (USD/ZAR)
 input double   InpMaxDailyLossPct    = 1.50;                     // Daily Hard Drawdown Stop (%)
@@ -545,7 +551,7 @@ bool   asianSweptLow  = false;
 int OnInit()
   {
    trade.SetExpertMagicNumber(776004742);
-   Print("[Liquidity Edge EA] System Initialized. Hotline: 077 600 4742. Risk: ", InpRiskPercent, "%");
+   Print("[${brand.brandName} Sweep EA] System Initialized. Owner: ${brand.ownerName}. Risk: ", InpRiskPercent, "%");
    return(INIT_SUCCEEDED);
   }
 
@@ -620,7 +626,7 @@ double CalculateLotSize(double slDistancePrice)
   }`;
 
   const copyCode = () => {
-    navigator.clipboard.writeText(mql5Code);
+    void navigator.clipboard?.writeText(mql5Code).catch(() => undefined);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
   };
@@ -643,7 +649,7 @@ double CalculateLotSize(double slDistancePrice)
       {lastExecutedAlert && (
         <div className="bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 px-4 py-3 rounded-2xl flex items-center justify-between shadow-2xl animate-in slide-in-from-top-2">
           <div className="flex items-center gap-3">
-            <Zap className="w-5 h-5 text-emerald-400 animate-bounce" />
+            <Zap className="w-5 h-5 text-emerald-400" />
             <span className="font-bold text-sm">{lastExecutedAlert}</span>
           </div>
           <span className="text-xs bg-emerald-500/30 px-2 py-0.5 rounded text-white font-bold">
@@ -664,55 +670,49 @@ double CalculateLotSize(double slDistancePrice)
         </div>
       )}
 
-      {/* Hero: Liquidity Edge EA Official TikTok Clone & Verification Banner */}
-      <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-[#0d121c] via-[#090d15] to-[#17130b] border border-amber-500/30 p-6 md:p-8 shadow-[0_12px_45px_rgba(0,0,0,0.85)]">
-        {/* Ambient Gold & Cyan Glow */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-
+      {/* Hero: Liquidity Edge EA Verification Banner */}
+      <div className="relative rounded-2xl overflow-hidden bg-[#0F141E] border border-white/[0.08] p-6 md:p-8 shadow-xl">
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-3 max-w-3xl">
-            {/* Top Badges */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold tracking-wider uppercase font-orbitron animate-pulse">
-                <Flame className="w-3.5 h-3.5 text-amber-400 fill-current" />
-                TikTok Viral • @liquidityedgeea
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="inline-flex items-center gap-1.5 text-amber-300 font-semibold">
+                <Flame className="w-3.5 h-3.5 text-amber-400" />
+                <span>{brand.brandName} · {brand.ownerEntity}</span>
               </span>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-bold">
+              <span className="text-slate-600" aria-hidden="true">·</span>
+              <span className="inline-flex items-center gap-1.5 text-cyan-300 font-semibold">
                 <Zap className="w-3.5 h-3.5 text-cyan-400" />
-                SMC Institutional Liquidity Sweeps
+                <span>SMC Institutional Liquidity Sweeps</span>
               </span>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs">
-                <CheckCircle2 className="w-3 h-3" />
-                SafeBridge 0.30 Micro-Capital Guard
+              <span className="text-slate-600" aria-hidden="true">·</span>
+              <span className="inline-flex items-center gap-1 text-emerald-400 font-semibold">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>SafeBridge 0.30 Micro-Capital Guard</span>
               </span>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs">
-                <Database className="w-3 h-3 text-purple-400" />
-                Cloud SQL &amp; Firebase (europe-west3)
+              <span className="text-slate-600" aria-hidden="true">·</span>
+              <span className="inline-flex items-center gap-1 text-slate-300">
+                <Database className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Cloud SQL &amp; Firebase (europe-west3)</span>
               </span>
             </div>
 
             {/* Title & Slogan */}
-            <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight font-orbitron">
-              LIQUIDITY <span className="text-amber-400 text-glow-amber">EDGE</span> EA{' '}
-              <span className="text-sm sm:text-lg font-normal text-slate-400">v4.2 PRO</span>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight font-display">
+              {brand.brandName} Liquidity Sweep EA <span className="text-slate-400 font-normal text-lg">v4.2 Pro</span>
             </h1>
 
             <p className="text-sm text-slate-300 leading-relaxed font-sans">
-              Automated algorithmic MetaTrader 5 execution bot engineered to exploit retail stop-loss clusters, Asian session range sweeps, Fair Value Gaps (FVG), and London/NY Killzone order blocks.
+              Proprietary algorithmic MetaTrader 5 execution engine owned by {brand.ownerName}, engineered to harvest retail stop-loss clusters, Asian session range sweeps, Fair Value Gaps (FVG), and London/NY Killzone order blocks.
             </p>
 
-            {/* TikTok Official Hotline Card & Google Workspace Auth */}
+            {/* Owner Desk Contact & Google Workspace Auth */}
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <a
-                href="https://wa.me/27776004742?text=Hello%20Liquidity%20Edge%20EA%20team,%20I%20am%20ready%20to%20get%20automated"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-950/50 transition transform hover:scale-[1.02]"
+                href={`mailto:${brand.ownerEmail}?subject=${encodeURIComponent(`${brand.brandName} Sweep EA Inquiry`)}`}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition"
               >
-                <Phone className="w-4 h-4 fill-current" />
-                <span>Get Automated: 077 600 4742 (WhatsApp)</span>
-                <ExternalLink className="w-3.5 h-3.5" />
+                <Shield className="w-4 h-4" />
+                <span>Owner Support: {brand.ownerEmail}</span>
               </a>
 
               <button
@@ -773,13 +773,13 @@ double CalculateLotSize(double slDistancePrice)
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <Cpu className="w-5 h-5 text-amber-400" />
-                <span className="font-bold text-sm text-white font-orbitron">ROBOT ENGINE</span>
+                <span className="font-bold text-sm text-white font-display">ROBOT ENGINE</span>
               </div>
               <button
                 onClick={() => setIsBotActive(!isBotActive)}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition ${
                   isBotActive
-                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30 animate-pulse'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30'
                     : 'bg-slate-800 text-slate-400 hover:text-white'
                 }`}
               >
@@ -792,8 +792,8 @@ double CalculateLotSize(double slDistancePrice)
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
                 <div className="text-[10px] text-slate-400 uppercase">Bridge Link</div>
-                <div className="text-emerald-400 font-bold flex items-center gap-1 mt-0.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <div className="text-emerald-400 font-bold flex items-center gap-1.5 mt-0.5 tabular-nums">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
                   {isBridgeConnected ? `${bridgeLatencyMs}ms DMA` : 'Reconnecting DMA'}
                 </div>
               </div>
@@ -867,8 +867,8 @@ double CalculateLotSize(double slDistancePrice)
                 onClick={() => setActiveCodeTab(tab.id as typeof activeCodeTab)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
                   isActive
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
-                    : 'bg-[#0a0e17] text-slate-400 hover:text-white border border-slate-800 hover:border-slate-700'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                    : 'bg-[#090C12] text-slate-400 hover:text-white border border-white/[0.08] hover:border-slate-700'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -904,11 +904,11 @@ double CalculateLotSize(double slDistancePrice)
             <div className="bg-[#0a0e18] border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
               <div>
                 <span className="text-[10px] text-slate-400 uppercase">Spot Market</span>
-                <div className="text-xl font-extrabold text-white font-orbitron">{selectedSymbol}</div>
+                <div className="text-xl font-extrabold text-white font-display">{selectedSymbol}</div>
                 <div className="text-xs text-amber-400">Spread: {currentMarket.digits === 5 ? '1.2' : '2.0'} pts</div>
               </div>
-              <div className="text-right">
-                <div className="text-2xl font-black text-amber-300 font-orbitron">
+              <div className="text-right tabular-nums">
+                <div className="text-2xl font-bold text-amber-300 font-mono">
                   {currentMarket.bid.toFixed(currentMarket.digits)}
                 </div>
                 <div className="text-xs font-bold text-emerald-400 flex items-center justify-end gap-1">
@@ -921,15 +921,15 @@ double CalculateLotSize(double slDistancePrice)
             <div className="bg-[#0a0e18] border border-slate-800 p-4 rounded-2xl">
               <span className="text-[10px] text-slate-400 uppercase">Active Session Killzone</span>
               <div className="flex items-center gap-2 mt-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-sm font-bold text-emerald-400 font-orbitron">LONDON KILLZONE</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span className="text-sm font-bold text-emerald-400 font-display">LONDON KILLZONE</span>
               </div>
               <div className="text-xs text-slate-400 mt-1">07:00 – 10:00 UTC (Judas Reversal Active)</div>
             </div>
 
             <div className="bg-[#0a0e18] border border-slate-800 p-4 rounded-2xl">
               <span className="text-[10px] text-slate-400 uppercase">Next Liquidity Magnet</span>
-              <div className="text-sm font-bold text-rose-400 font-orbitron mt-1">
+              <div className="text-sm font-bold text-rose-400 font-mono tabular-nums mt-1">
                 Asian High ({liquidityPools[1]?.level})
               </div>
               <div className="text-xs text-slate-400 mt-1">
@@ -962,10 +962,10 @@ double CalculateLotSize(double slDistancePrice)
           </div>
 
           {/* Interactive Liquidity Pools & Institutional Order Blocks Canvas */}
-          <div className="bg-[#080c14] border border-slate-800/80 rounded-3xl p-5 md:p-6 shadow-2xl relative overflow-hidden">
+          <div className="bg-[#0F141E] border border-white/[0.08] rounded-2xl p-5 md:p-6 shadow-2xl relative overflow-hidden">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-800/80 gap-3">
               <div>
-                <h3 className="text-base font-bold text-white uppercase tracking-wider flex items-center gap-2 font-orbitron">
+                <h3 className="text-base font-bold text-white uppercase tracking-wider flex items-center gap-2 font-display">
                   <Crosshair className="w-4 h-4 text-amber-400" />
                   Institutional Liquidity Radar ({selectedSymbol})
                 </h3>
@@ -980,14 +980,14 @@ double CalculateLotSize(double slDistancePrice)
                   onClick={handleTriggerSweepSimulation}
                   className="px-3.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition active:scale-95"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                   <span>Scan Asian High Sweep</span>
                 </button>
               </div>
             </div>
 
             {sweepFlashMessage && (
-              <div className="my-3 p-3 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center gap-2 animate-pulse">
+              <div className="my-3 p-3 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center gap-2">
                 <Zap className="w-4 h-4 text-amber-400" />
                 <span>{sweepFlashMessage}</span>
               </div>
@@ -1003,7 +1003,7 @@ double CalculateLotSize(double slDistancePrice)
                     key={pool.id}
                     className={`p-4 rounded-2xl border transition relative overflow-hidden ${
                       isSwept
-                        ? 'bg-rose-950/20 border-rose-500/40 shadow-[0_0_20px_rgba(244,63,94,0.15)]'
+                        ? 'bg-rose-950/20 border-rose-500/40'
                         : isBSL
                         ? 'bg-[#0f1422] border-amber-500/30 hover:border-amber-500/50'
                         : 'bg-[#0d1720] border-cyan-500/30 hover:border-cyan-500/50'
@@ -1025,13 +1025,13 @@ double CalculateLotSize(double slDistancePrice)
                               {pool.timeframe}
                             </span>
                             {isSwept && (
-                              <span className="text-[10px] px-2 py-0.5 rounded bg-rose-500 text-white font-black animate-pulse">
-                                ⚡ LIQUIDITY PURGED
+                              <span className="text-[10px] px-2 py-0.5 rounded bg-rose-500 text-white font-bold">
+                                LIQUIDITY PURGED
                               </span>
                             )}
                           </div>
                           <div className="text-xs text-slate-400 mt-0.5">
-                            Volume: <span className="text-slate-200 font-bold">{pool.volumeUsd}</span> • Distance:{' '}
+                            Volume: <span className="text-slate-200 font-bold">{pool.volumeUsd}</span> · Distance:{' '}
                             <span className="text-amber-400 font-bold">{pool.distancePips} pips</span>
                           </div>
                         </div>
@@ -1040,7 +1040,7 @@ double CalculateLotSize(double slDistancePrice)
                       <div className="flex items-center gap-4">
                         <div className="text-right">
                           <div className="text-xs text-slate-400 uppercase">Target Level</div>
-                          <div className="text-lg font-black text-white font-orbitron">
+                          <div className="text-lg font-bold text-white font-mono tabular-nums">
                             {pool.level.toFixed(currentMarket.digits)}
                           </div>
                         </div>
@@ -1069,8 +1069,8 @@ double CalculateLotSize(double slDistancePrice)
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Target className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base font-bold text-white uppercase tracking-wider font-orbitron">
-                  Live Liquidity Edge Signals &amp; Execution Queue
+                <h3 className="text-base font-bold text-white uppercase tracking-wider font-display">
+                  {brand.brandName} Sweep Signals &amp; Execution Queue
                 </h3>
               </div>
               <span className="text-xs text-slate-400 font-mono">
@@ -1095,7 +1095,7 @@ double CalculateLotSize(double slDistancePrice)
                         >
                           {sig.side}
                         </span>
-                        <span className="font-bold text-white font-orbitron">{sig.symbol}</span>
+                        <span className="font-bold text-white font-mono">{sig.symbol}</span>
                       </div>
                       <span className="text-[11px] text-slate-400 font-mono">{sig.timestamp}</span>
                     </div>
@@ -1144,18 +1144,18 @@ double CalculateLotSize(double slDistancePrice)
         </div>
       )}
 
-      {/* TAB 2: INTERACTIVE CANDLESTICK CANVAS & TIKTOK OVERLAY */}
+      {/* TAB 2: INTERACTIVE CANDLESTICK CANVAS & SMC OVERLAY */}
       {activeCodeTab === 'CHART' && (
         <div className="space-y-6">
-          <div className="bg-[#060911] border border-amber-500/40 rounded-3xl p-5 md:p-6 shadow-2xl space-y-4">
+          <div className="bg-[#0F141E] border border-amber-500/30 rounded-2xl p-5 md:p-6 shadow-2xl space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-3">
               <div>
-                <h3 className="text-base font-bold text-white uppercase tracking-wider font-orbitron flex items-center gap-2">
+                <h3 className="text-base font-bold text-white uppercase tracking-wider font-display flex items-center gap-2">
                   <BarChart2 className="w-4 h-4 text-amber-400" />
                   SMC Candlestick Deck &amp; Liquidity Corridors ({selectedSymbol})
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Exact visual layout cloned from TikTok @liquidityedgeea: Asian range box, BSL/SSL sweeps &amp; FVG
+                  Institutional SMC Sweep Canvas: Asian session range box, BSL/SSL pools &amp; FVG corridors
                 </p>
               </div>
 
@@ -1228,7 +1228,7 @@ double CalculateLotSize(double slDistancePrice)
                 <rect x="323" y="110" width="14" height="65" fill={isSweepSimulating ? '#f59e0b' : '#f43f5e'} />
 
                 {/* Judas Wick Purging BSL */}
-                <circle cx="330" cy="85" r="5" fill="#f59e0b" className={isSweepSimulating ? 'animate-ping' : ''} />
+                <circle cx="330" cy="85" r={isSweepSimulating ? 7 : 5} fill="#f59e0b" opacity={isSweepSimulating ? 1 : 0.7} />
 
                 {/* Reversal Candles after Purge */}
                 <line x1="365" y1="100" x2="365" y2="170" stroke="#f43f5e" strokeWidth="1.5" />
@@ -1270,10 +1270,10 @@ double CalculateLotSize(double slDistancePrice)
       {/* TAB 3: GOOGLE WORKSPACE SYNC HUB (Sheets, Drive, Gmail, Classroom) */}
       {activeCodeTab === 'WORKSPACE' && (
         <div className="space-y-6">
-          <div className="bg-[#080c14] border border-cyan-500/30 rounded-3xl p-6 md:p-8 space-y-6">
+          <div className="bg-[#0F141E] border border-cyan-500/30 rounded-2xl p-6 md:p-8 space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-800 gap-3">
               <div>
-                <h3 className="text-lg font-bold text-white font-orbitron flex items-center gap-2">
+                <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
                   <FolderSync className="w-5 h-5 text-cyan-400" />
                   Google Workspace Automated Suite
                 </h3>
@@ -1367,18 +1367,18 @@ double CalculateLotSize(double slDistancePrice)
                   className="w-full py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center justify-center gap-2 transition"
                 >
                   <Send className="w-4 h-4" />
-                  <span>Send Test Alert to thulanimyeni19712@gmail.com</span>
+                  <span>Send Test Alert to {brand.ownerEmail}</span>
                 </button>
               </div>
 
               {/* Card 4: Google Classroom Masterclass */}
               <div className="bg-[#0c121f] border border-slate-800 p-5 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-purple-400 font-bold text-sm">
+                  <div className="flex items-center gap-2 text-sky-400 font-bold text-sm">
                     <GraduationCap className="w-4 h-4" />
                     <span>Google Classroom Coursework</span>
                   </div>
-                  <span className="text-[10px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded font-bold">
+                  <span className="text-[10px] bg-sky-500/20 text-sky-300 px-2 py-0.5 rounded font-bold">
                     Classroom API
                   </span>
                 </div>
@@ -1389,7 +1389,7 @@ double CalculateLotSize(double slDistancePrice)
                   href="https://classroom.google.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full py-2.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-bold flex items-center justify-center gap-2 transition"
+                  className="w-full py-2.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-xs font-bold flex items-center justify-center gap-2 transition"
                 >
                   <GraduationCap className="w-4 h-4" />
                   <span>Launch Google Classroom Coursework</span>
@@ -1404,13 +1404,13 @@ double CalculateLotSize(double slDistancePrice)
       {/* TAB 4: SMC STRATEGY RULES */}
       {activeCodeTab === 'STRATEGY' && (
         <div className="space-y-6">
-          <div className="bg-[#080c14] border border-slate-800 rounded-3xl p-6 md:p-8 space-y-6">
+          <div className="bg-[#0F141E] border border-white/[0.08] rounded-2xl p-6 md:p-8 space-y-6">
             <div>
-              <h3 className="text-xl font-bold text-white font-orbitron text-glow-amber">
+              <h3 className="text-xl font-bold text-white font-display">
                 Smart Money Concepts (SMC) &amp; Liquidity Sweep Blueprint
               </h3>
               <p className="text-sm text-slate-400 mt-1">
-                How Liquidity Edge EA achieves high win rates by trading exclusively with institutional market makers.
+                How {brand.brandName} SMC achieves high win rates by trading exclusively with institutional order flow.
               </p>
             </div>
 
@@ -1431,7 +1431,7 @@ double CalculateLotSize(double slDistancePrice)
                   <span>2. Fair Value Gap (FVG) Imbalance Harvesting</span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed font-sans">
-                  When large banks enter massive block orders, it leaves a 3-candle price imbalance (FVG). Liquidity Edge EA waits for the price to retrace into the 50% equilibrium level (Consequent Encroachment) of the FVG before firing sniper market execution.
+                  When large banks enter massive block orders, it leaves a 3-candle price imbalance (FVG). {brand.brandName} Sweep EA waits for the price to retrace into the 50% equilibrium level (Consequent Encroachment) of the FVG before firing sniper market execution.
                 </p>
               </div>
 
@@ -1464,7 +1464,7 @@ double CalculateLotSize(double slDistancePrice)
         <div className="space-y-4">
           <div className="flex items-center justify-between bg-[#0a0e17] p-4 rounded-2xl border border-slate-800">
             <div>
-              <div className="text-sm font-bold text-white font-orbitron">
+              <div className="text-sm font-bold text-white font-mono">
                 LiquidityEdgeEA_v4_Pro.mq5
               </div>
               <div className="text-xs text-slate-400">
@@ -1502,25 +1502,23 @@ double CalculateLotSize(double slDistancePrice)
       {/* TAB 6: MT5 SETUP & VPS INSTALLATION GUIDE */}
       {activeCodeTab === 'INSTALL' && (
         <div className="space-y-6">
-          <div className="bg-[#080c14] border border-slate-800 rounded-3xl p-6 md:p-8 space-y-6">
+          <div className="bg-[#0F141E] border border-white/[0.08] rounded-2xl p-6 md:p-8 space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div>
-                <h3 className="text-lg font-bold text-white font-orbitron">
+                <h3 className="text-lg font-bold text-white font-display">
                   MetaTrader 5 Installation &amp; Live Bot Setup
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Follow these 4 simple steps to run Liquidity Edge EA on any broker terminal
+                  Follow these 4 simple steps to run {brand.brandName} Sweep EA on any broker terminal
                 </p>
               </div>
 
               <a
-                href="https://wa.me/27776004742?text=Need%20help%20installing%20Liquidity%20Edge%20EA"
-                target="_blank"
-                rel="noopener noreferrer"
+                href={`mailto:${brand.ownerEmail}?subject=${encodeURIComponent(`${brand.brandName} MT5 Installation Support`)}`}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold"
               >
-                <Phone className="w-3.5 h-3.5" />
-                <span>WhatsApp Setup Help: 077 600 4742</span>
+                <Shield className="w-3.5 h-3.5" />
+                <span>Desk Support: {brand.ownerName}</span>
               </a>
             </div>
 
@@ -1568,7 +1566,7 @@ double CalculateLotSize(double slDistancePrice)
                 <div>
                   <h4 className="font-bold text-slate-100 text-sm">Input Your License &amp; Risk Parameters</h4>
                   <p className="text-slate-400 mt-1">
-                    Set InpLicenseKey to your active license (<code className="text-cyan-300">LE-SA-077-600-4742-GOLD</code>). Set your desired Risk Percent (default 0.50%). Click OK. The Liquidity Edge cockpit will render on your chart!
+                    Set InpLicenseKey to your active license (<code className="text-cyan-300">APX-SOV-MYENI-GOLD-V4</code>). Set your desired Risk Percent (default 0.50%). Click OK. The {brand.brandName} Sweep cockpit will render on your chart!
                   </p>
                 </div>
               </div>

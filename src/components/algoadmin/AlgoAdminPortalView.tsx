@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Server,
   Shield,
@@ -11,12 +11,12 @@ import {
   Check,
   Sliders,
   AlertTriangle,
-  Sparkles,
+  CheckCircle2,
   RotateCcw,
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { auth, dbFirestore, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { collection, getDocs, addDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { generateKeyCode, randomHex } from '../../lib/crypto';
 
 interface AlgoAdminPortalViewProps {
@@ -35,6 +35,14 @@ interface ClientLicenseItem {
   expiresAt: string;
   status: 'ACTIVE' | 'EXPIRED' | 'REVOKED' | 'PENDING';
   maxAccounts: number;
+}
+
+interface AuditLogEntry {
+  time: string;
+  action: string;
+  target: string;
+  admin: string;
+  status: string;
 }
 
 const INITIAL_ADMIN_LICENSES: ClientLicenseItem[] = [
@@ -106,13 +114,12 @@ const INITIAL_ADMIN_LICENSES: ClientLicenseItem[] = [
 ];
 
 export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpenPublicSite }) => {
-  const { bridgeLatencyMs } = useTrading();
+  const { bridgeLatencyMs, orderHistory, positions, accountEquity } = useTrading();
   const [activeTab, setActiveTab] = useState<'LICENSES' | 'TERMINALS' | 'PRESETS' | 'AUDIT'>('LICENSES');
   const [licenses, setLicenses] = useState<ClientLicenseItem[]>(INITIAL_ADMIN_LICENSES);
   const [filterQuery, setFilterQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'EXPIRED' | 'REVOKED'>('ALL');
 
-  // Issue License Modal State
   const [isIssueModalOpen, setIsIssueModalOpen] = useState<boolean>(false);
   const [newClientName, setNewClientName] = useState<string>('');
   const [newClientEmail, setNewClientEmail] = useState<string>('');
@@ -122,13 +129,21 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
   const [newStrategy, setNewStrategy] = useState<string>('AlgoMax Prop Pass v5.2');
   const [newPlanType, setNewPlanType] = useState<'STARTER' | 'PROP' | 'LIFETIME'>('PROP');
 
-  // Emergency Global Kill Switch Modal
   const [isKillSwitchModalOpen, setIsKillSwitchModalOpen] = useState<boolean>(false);
   const [isGlobalFrozen, setIsGlobalFrozen] = useState<boolean>(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [isPingingFleet, setIsPingingFleet] = useState<boolean>(false);
   const [lastFleetPingAt, setLastFleetPingAt] = useState<string>('Just now');
+  const [firestoreConnected, setFirestoreConnected] = useState<boolean>(false);
+
+  const [fleetKpis, setFleetKpis] = useState({
+    managedEquityUsd: 390768.2,
+    activePorts: 4,
+    totalExecutionsToday: 24,
+    avgSlippagePct: 0.02,
+  });
+
   const [fleetNodes, setFleetNodes] = useState([
     {
       client: 'Alex Mercer',
@@ -172,6 +187,16 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
     },
   ]);
 
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([
+    {
+      time: 'Initial boot',
+      action: 'FLEET_HEARTBEAT',
+      target: 'Equinix LD4 / NY4 / FR2 telemetry online',
+      admin: 'thulanimyeni19712@gmail.com',
+      status: 'VERIFIED',
+    },
+  ]);
+
   const timersRef = useRef<number[]>([]);
 
   useEffect(() => {
@@ -181,7 +206,20 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
     };
   }, []);
 
-  // Sync with Firestore (Strict super-admin only) & fetch real backend telemetry
+  const appendAudit = (action: string, target: string, status = 'SUCCESS') => {
+    const nowLabel = new Date().toLocaleTimeString([], { hour12: false });
+    setAuditLogs((prev) => [
+      {
+        time: nowLabel,
+        action,
+        target,
+        admin: auth.currentUser?.email || 'thulanimyeni19712@gmail.com',
+        status,
+      },
+      ...prev,
+    ]);
+  };
+
   useEffect(() => {
     async function loadInitialTelemetry() {
       try {
@@ -191,6 +229,12 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
         if (res.ok) {
           const data = await res.json();
           const serverLatency = Number(data?.kpis?.serverLatencyMs ?? rtt);
+          setFleetKpis((prev) => ({
+            managedEquityUsd: Number(data?.kpis?.managedEquityUsd ?? prev.managedEquityUsd),
+            activePorts: Number(data?.kpis?.activePorts ?? prev.activePorts),
+            totalExecutionsToday: Number(data?.kpis?.totalExecutionsToday ?? prev.totalExecutionsToday),
+            avgSlippagePct: Number(data?.kpis?.avgSlippagePct ?? prev.avgSlippagePct),
+          }));
           setFleetNodes((prev) =>
             prev.map((node, idx) => ({
               ...node,
@@ -200,7 +244,7 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
           setLastFleetPingAt(new Date().toLocaleTimeString([], { hour12: false }));
         }
       } catch {
-        // Backend telemetry probe deferred until interactive ping
+        // Backend telemetry probe deferred
       }
 
       if (
@@ -209,6 +253,7 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
       ) {
         try {
           const snap = await getDocs(collection(dbFirestore, 'licenses'));
+          setFirestoreConnected(true);
           if (!snap.empty) {
             const loaded: ClientLicenseItem[] = [];
             snap.forEach((docSnap) => {
@@ -223,7 +268,7 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
         }
       }
     }
-    loadInitialTelemetry();
+    void loadInitialTelemetry();
   }, []);
 
   const showNotice = (msg: string) => {
@@ -233,11 +278,11 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
   };
 
   const handleCopyKey = (key: string) => {
-    navigator.clipboard.writeText(key);
+    void navigator.clipboard?.writeText(key).catch(() => undefined);
     setCopiedKey(key);
     const t = window.setTimeout(() => setCopiedKey(null), 2500);
     timersRef.current.push(t);
-    showNotice(`License key ${key} copied to clipboard!`);
+    showNotice(`License key ${key} copied to clipboard.`);
   };
 
   const handlePingFleet = async () => {
@@ -251,13 +296,20 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
       }
       const data = await res.json();
       const serverLatency = Number(data?.kpis?.serverLatencyMs ?? rtt);
+      setFleetKpis((prev) => ({
+        managedEquityUsd: Number(data?.kpis?.managedEquityUsd ?? prev.managedEquityUsd),
+        activePorts: Number(data?.kpis?.activePorts ?? prev.activePorts),
+        totalExecutionsToday: Number(data?.kpis?.totalExecutionsToday ?? prev.totalExecutionsToday),
+        avgSlippagePct: Number(data?.kpis?.avgSlippagePct ?? prev.avgSlippagePct),
+      }));
       setFleetNodes((prev) =>
         prev.map((node, idx) => ({
           ...node,
-          ping: Number(Math.max(0.2, (idx === 0 ? rtt : serverLatency + idx * 0.2)).toFixed(1)),
+          ping: Number(Math.max(0.2, idx === 0 ? rtt : serverLatency + idx * 0.2).toFixed(1)),
         }))
       );
       setLastFleetPingAt(new Date().toLocaleTimeString([], { hour12: false }));
+      appendAudit('FLEET_PING', `RTT ${rtt}ms / Server loop ${serverLatency}ms`);
       showNotice(`Live fleet probe complete (${rtt}ms HTTP RTT, ${serverLatency}ms server loop).`);
     } catch (err: unknown) {
       showNotice(`Fleet probe failed: ${(err as Error).message}`);
@@ -266,27 +318,57 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
     }
   };
 
-  const handleToggleStatus = (id: string) => {
-    setLicenses((prev) =>
-      prev.map((l) => {
-        if (l.id !== id) return l;
-        const newStatus = l.status === 'ACTIVE' ? 'REVOKED' : 'ACTIVE';
-        return { ...l, status: newStatus };
-      })
-    );
-    showNotice(`License status updated.`);
+  const isSuperAdminAuth =
+    auth.currentUser?.email === 'thulanimyeni19712@gmail.com' &&
+    Boolean(auth.currentUser?.emailVerified);
+
+  const handleToggleStatus = async (id: string) => {
+    const target = licenses.find((l) => l.id === id);
+    if (!target) return;
+    const newStatus: ClientLicenseItem['status'] = target.status === 'ACTIVE' ? 'REVOKED' : 'ACTIVE';
+
+    setLicenses((prev) => prev.map((l) => (l.id === id ? { ...l, status: newStatus } : l)));
+    appendAudit('LICENSE_STATUS', `${target.clientName} (${target.key}) -> ${newStatus}`);
+
+    if (isSuperAdminAuth) {
+      try {
+        await updateDoc(doc(dbFirestore, 'licenses', id), { status: newStatus });
+        showNotice(`Updated ${target.key} status to ${newStatus} in Firestore.`);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `licenses/${id}`);
+        showNotice(`Updated ${target.key} to ${newStatus} locally.`);
+      }
+    } else {
+      showNotice(`Updated ${target.key} status to ${newStatus} in active session.`);
+    }
   };
 
-  const handleExtendExpiry = (id: string, days: number) => {
+  const handleExtendExpiry = async (id: string, days: number) => {
+    const target = licenses.find((l) => l.id === id);
+    if (!target) return;
+    const d = new Date(target.expiresAt || Date.now());
+    d.setDate(d.getDate() + days);
+    const nextExpiresAt = d.toISOString().substring(0, 10);
+
     setLicenses((prev) =>
-      prev.map((l) => {
-        if (l.id !== id) return l;
-        const d = new Date(l.expiresAt || Date.now());
-        d.setDate(d.getDate() + days);
-        return { ...l, expiresAt: d.toISOString().substring(0, 10), status: 'ACTIVE' };
-      })
+      prev.map((l) => (l.id === id ? { ...l, expiresAt: nextExpiresAt, status: 'ACTIVE' } : l))
     );
-    showNotice(`License extended by ${days} days.`);
+    appendAudit('LICENSE_EXTEND', `${target.clientName} extended +${days}d -> ${nextExpiresAt}`);
+
+    if (isSuperAdminAuth) {
+      try {
+        await updateDoc(doc(dbFirestore, 'licenses', id), {
+          expiresAt: nextExpiresAt,
+          status: 'ACTIVE',
+        });
+        showNotice(`Extended ${target.key} to ${nextExpiresAt} and synced to Firestore.`);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `licenses/${id}`);
+        showNotice(`Extended ${target.key} locally.`);
+      }
+    } else {
+      showNotice(`Extended ${target.key} by ${days} days in active session.`);
+    }
   };
 
   const handleIssueLicenseSubmit = async (e: React.FormEvent) => {
@@ -303,7 +385,9 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
       clientEmail: newClientEmail || 'client@tradingdesk.com',
       broker: newBroker,
       accountNumber: newAccountNumber || '8940122',
-      hwid: newHwid || `HWID-${randomHex(2).toUpperCase()}-${randomHex(2).toUpperCase()}-${randomHex(2).toUpperCase()}`,
+      hwid:
+        newHwid ||
+        `HWID-${randomHex(2).toUpperCase()}-${randomHex(2).toUpperCase()}-${randomHex(2).toUpperCase()}`,
       robotName: newStrategy,
       expiresAt: expDate.toISOString().substring(0, 10),
       status: 'ACTIVE',
@@ -312,21 +396,33 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
 
     setLicenses((prev) => [newLic, ...prev]);
     setIsIssueModalOpen(false);
+    appendAudit('LICENSE_ISSUE', `${newLic.clientName} (${newLic.key})`);
 
-    if (
-      auth.currentUser?.email === 'thulanimyeni19712@gmail.com' &&
-      auth.currentUser?.emailVerified
-    ) {
+    if (isSuperAdminAuth) {
       try {
-        await addDoc(collection(dbFirestore, 'licenses'), newLic);
+        await setDoc(doc(dbFirestore, 'licenses', newLic.id), newLic);
         showNotice(`Issued and synced license ${newKey} to Firestore.`);
       } catch (err: unknown) {
-        showNotice(`Issued ${newKey} locally (Firestore sync failed: ${(err as Error).message}).`);
+        handleFirestoreError(err, OperationType.CREATE, `licenses/${newLic.id}`);
+        showNotice(`Issued ${newKey} locally (Firestore sync requires matching rule permissions).`);
       }
     } else {
-      showNotice(`Issued license ${newKey} in active session.`);
+      showNotice(`Issued license ${newKey} in active session (Sign in as verified Super Admin to sync Firestore).`);
     }
   };
+
+  const activeLicenseCount = useMemo(
+    () => licenses.filter((l) => l.status === 'ACTIVE').length,
+    [licenses]
+  );
+  const licenseHealthPct = licenses.length > 0 ? (activeLicenseCount / licenses.length) * 100 : 100;
+
+  const totalNodeEquity = useMemo(() => {
+    const nodesSum = fleetNodes.reduce((sum, node) => sum + node.equity, 0);
+    return Math.max(fleetKpis.managedEquityUsd, nodesSum + accountEquity);
+  }, [fleetNodes, fleetKpis.managedEquityUsd, accountEquity]);
+
+  const totalExecutionsDisplay = fleetKpis.totalExecutionsToday + orderHistory.length + positions.length;
 
   const filteredLicenses = licenses.filter((l) => {
     const matchesSearch =
@@ -341,38 +437,37 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
   });
 
   return (
-    <div className="space-y-8 pb-16 font-mono selection:bg-purple-500/30 selection:text-purple-200">
-      {/* Toast Notice */}
+    <div className="space-y-6 pb-16 selection:bg-cyan-500/30 selection:text-cyan-200">
       {actionNotice && (
-        <div className="p-3 bg-purple-950 border border-purple-500 text-purple-200 rounded-2xl text-xs font-bold shadow-lg flex items-center justify-between animate-in fade-in duration-200">
+        <div className="p-3 bg-cyan-950/80 border border-cyan-500/40 text-cyan-100 rounded-xl text-xs font-semibold flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-purple-400" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{actionNotice}</span>
           </div>
-          <button onClick={() => setActionNotice(null)} className="text-purple-400 hover:text-white">
+          <button onClick={() => setActionNotice(null)} className="text-cyan-300 hover:text-white px-2">
             &times;
           </button>
         </div>
       )}
 
-      {/* ADMIN MASTER HEADER */}
-      <div className="p-5 rounded-3xl bg-gradient-to-r from-[#0d0d1b] via-[#120f26] to-[#0a0a14] border-2 border-purple-500/40 shadow-[0_0_50px_rgba(168,85,247,0.18)] flex flex-wrap items-center justify-between gap-4">
+      {/* Admin Header */}
+      <div className="p-5 rounded-2xl bg-[#0F141E] border border-white/[0.08] flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-ping" />
-            <span className="text-[11px] font-black text-purple-400 font-orbitron tracking-widest uppercase">
-              ALGOADMINPORTAL.COM • MASTER CLOUD CONTROL
+          <span className="text-[11px] font-bold text-cyan-400 tracking-wider uppercase block">
+            AlgoAdminPortal.com • Master Cloud Control
+          </span>
+          <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+            Algo Admin Portal{' '}
+            <span className="text-slate-400 text-sm font-normal">
+              | Super Admin (thulanimyeni19712@gmail.com)
             </span>
-          </div>
-          <h1 className="text-xl sm:text-2xl font-black text-white font-orbitron tracking-tight">
-            Algo Admin Portal <span className="text-purple-400 text-sm font-sans font-normal">| Super Admin (thulanimyeni19712@gmail.com)</span>
           </h1>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={onOpenPublicSite}
-            className="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-white text-xs font-bold font-orbitron transition flex items-center gap-2 border border-slate-700"
+            className="py-2.5 px-4 rounded-xl bg-[#161D2B] hover:bg-[#1E2738] text-cyan-300 hover:text-white text-xs font-semibold transition flex items-center gap-2 border border-white/[0.08] whitespace-nowrap"
           >
             <ExternalLink className="w-3.5 h-3.5" />
             <span>View Public Site (algomax-ea.com)</span>
@@ -380,79 +475,91 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
 
           <button
             onClick={() => setIsKillSwitchModalOpen(true)}
-            className={`py-2.5 px-4 rounded-xl text-xs font-black font-orbitron tracking-wider transition flex items-center gap-2 ${
+            className={`py-2.5 px-4 rounded-xl text-xs font-bold tracking-wide transition flex items-center gap-2 whitespace-nowrap border ${
               isGlobalFrozen
-                ? 'bg-rose-600 text-white animate-pulse'
-                : 'bg-rose-950/60 hover:bg-rose-900 border border-rose-500/50 text-rose-300 hover:text-white'
+                ? 'bg-rose-600 text-white border-rose-400'
+                : 'bg-rose-950/50 hover:bg-rose-900 border-rose-500/40 text-rose-300 hover:text-white'
             }`}
           >
             <AlertTriangle className="w-4 h-4" />
-            <span>{isGlobalFrozen ? 'FLEET FROZEN' : 'GLOBAL KILL SWITCH'}</span>
+            <span>{isGlobalFrozen ? 'Fleet Frozen' : 'Global Kill Switch'}</span>
           </button>
         </div>
       </div>
 
-      {/* GLOBAL KPI CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5 tabular-nums">
-        <div className="p-4 rounded-2xl bg-[#0c0d18] border border-purple-900/40">
-          <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-            Total Active Licenses
+      {/* Live Derived KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
+        <div className="p-4 rounded-2xl bg-[#0F141E] border border-white/[0.08]">
+          <div className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
+            Active Licenses
           </div>
-          <div className="text-xl sm:text-2xl font-black text-white font-orbitron mt-1">
-            {licenses.filter((l) => l.status === 'ACTIVE').length} / {licenses.length}
+          <div className="text-xl sm:text-2xl font-bold text-white font-mono tabular-nums mt-1">
+            {activeLicenseCount} / {licenses.length}
           </div>
-          <div className="text-[10px] text-emerald-400 font-bold mt-1">98.2% Client Health</div>
+          <div className="text-[11px] text-emerald-400 font-medium mt-1 font-mono tabular-nums">
+            {licenseHealthPct.toFixed(1)}% Active Health
+          </div>
         </div>
 
-        <div className="p-4 rounded-2xl bg-[#0c0d18] border border-purple-900/40">
-          <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-            Total Managed Equity
+        <div className="p-4 rounded-2xl bg-[#0F141E] border border-white/[0.08]">
+          <div className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
+            Managed Fleet Equity
           </div>
-          <div className="text-xl sm:text-2xl font-black text-emerald-400 font-orbitron mt-1">
-            $4,290,150
+          <div className="text-xl sm:text-2xl font-bold text-emerald-400 font-mono tabular-nums mt-1">
+            ${totalNodeEquity.toLocaleString('en-US', { maximumFractionDigits: 0 })}
           </div>
-          <div className="text-[10px] text-slate-400 mt-1">Across 418 Live Accounts</div>
+          <div className="text-[11px] text-slate-400 mt-1">
+            Across {fleetNodes.length} Registered Nodes
+          </div>
         </div>
 
-        <div className="p-4 rounded-2xl bg-[#0c0d18] border border-purple-900/40">
-          <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-            Connected VPS Nodes
+        <div className="p-4 rounded-2xl bg-[#0F141E] border border-white/[0.08]">
+          <div className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
+            Active VPS Nodes
           </div>
-          <div className="text-xl sm:text-2xl font-black text-cyan-300 font-orbitron mt-1">
-            418 MT5 / MT4
+          <div className="text-xl sm:text-2xl font-bold text-cyan-300 font-mono tabular-nums mt-1">
+            {fleetNodes.filter((n) => n.status === 'ONLINE').length} / {fleetNodes.length} Online
           </div>
-          <div className="text-[10px] text-cyan-400 mt-1">{bridgeLatencyMs}ms Equinix Ping</div>
+          <div className="text-[11px] text-cyan-400 mt-1 font-mono tabular-nums">
+            {bridgeLatencyMs.toFixed(1)}ms Equinix Ping
+          </div>
         </div>
 
-        <div className="p-4 rounded-2xl bg-[#0c0d18] border border-purple-900/40">
-          <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-            24h Executions
+        <div className="p-4 rounded-2xl bg-[#0F141E] border border-white/[0.08]">
+          <div className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
+            Session Executions
           </div>
-          <div className="text-xl sm:text-2xl font-black text-purple-300 font-orbitron mt-1">
-            29,480
+          <div className="text-xl sm:text-2xl font-bold text-amber-300 font-mono tabular-nums mt-1">
+            {totalExecutionsDisplay.toLocaleString()}
           </div>
-          <div className="text-[10px] text-purple-400 mt-1">0.02% Avg Slippage</div>
+          <div className="text-[11px] text-amber-400 mt-1 font-mono tabular-nums">
+            {fleetKpis.avgSlippagePct.toFixed(2)}% Avg Slippage
+          </div>
         </div>
 
-        <div className="p-4 rounded-2xl bg-[#0c0d18] border border-purple-900/40 col-span-2 lg:col-span-1">
-          <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-            Firestore Database
+        <div className="p-4 rounded-2xl bg-[#0F141E] border border-white/[0.08] col-span-2 lg:col-span-1">
+          <div className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
+            Firestore Sync
           </div>
-          <div className="text-xl sm:text-2xl font-black text-amber-300 font-orbitron mt-1">
-            CONNECTED
+          <div
+            className={`text-lg sm:text-xl font-bold font-mono mt-1 ${
+              firestoreConnected ? 'text-emerald-400' : 'text-amber-300'
+            }`}
+          >
+            {firestoreConnected ? 'SYNCED' : 'LOCAL MODE'}
           </div>
-          <div className="text-[10px] text-slate-400 truncate mt-1">resolute-kit-f3rp2</div>
+          <div className="text-[11px] text-slate-400 truncate mt-1 font-mono">resolute-kit-f3rp2</div>
         </div>
       </div>
 
-      {/* ADMIN PORTAL TABS */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto no-scrollbar">
+      {/* Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-white/[0.08] pb-2 overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveTab('LICENSES')}
-          className={`py-2 px-4 rounded-xl text-xs font-bold font-orbitron tracking-wider transition flex items-center gap-2 shrink-0 whitespace-nowrap min-h-[40px] tabular-nums ${
+          className={`py-2 px-4 rounded-xl text-xs font-semibold transition flex items-center gap-2 shrink-0 whitespace-nowrap min-h-[40px] ${
             activeTab === 'LICENSES'
-              ? 'bg-purple-600 text-white shadow-md'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              ? 'bg-cyan-500 text-slate-950 font-bold'
+              : 'text-slate-400 hover:text-white hover:bg-[#161D2B]'
           }`}
         >
           <Key className="w-4 h-4" />
@@ -461,22 +568,22 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
 
         <button
           onClick={() => setActiveTab('TERMINALS')}
-          className={`py-2 px-4 rounded-xl text-xs font-bold font-orbitron tracking-wider transition flex items-center gap-2 shrink-0 whitespace-nowrap min-h-[40px] tabular-nums ${
+          className={`py-2 px-4 rounded-xl text-xs font-semibold transition flex items-center gap-2 shrink-0 whitespace-nowrap min-h-[40px] ${
             activeTab === 'TERMINALS'
-              ? 'bg-purple-600 text-white shadow-md'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              ? 'bg-cyan-500 text-slate-950 font-bold'
+              : 'text-slate-400 hover:text-white hover:bg-[#161D2B]'
           }`}
         >
           <Server className="w-4 h-4" />
-          <span>VPS Terminal Fleet (418)</span>
+          <span>VPS Terminal Fleet ({fleetNodes.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('PRESETS')}
-          className={`py-2 px-4 rounded-xl text-xs font-bold font-orbitron tracking-wider transition flex items-center gap-2 shrink-0 whitespace-nowrap min-h-[40px] ${
+          className={`py-2 px-4 rounded-xl text-xs font-semibold transition flex items-center gap-2 shrink-0 whitespace-nowrap min-h-[40px] ${
             activeTab === 'PRESETS'
-              ? 'bg-purple-600 text-white shadow-md'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              ? 'bg-cyan-500 text-slate-950 font-bold'
+              : 'text-slate-400 hover:text-white hover:bg-[#161D2B]'
           }`}
         >
           <Sliders className="w-4 h-4" />
@@ -485,21 +592,20 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
 
         <button
           onClick={() => setActiveTab('AUDIT')}
-          className={`py-2 px-4 rounded-xl text-xs font-bold font-orbitron tracking-wider transition flex items-center gap-2 shrink-0 whitespace-nowrap min-h-[40px] ${
+          className={`py-2 px-4 rounded-xl text-xs font-semibold transition flex items-center gap-2 shrink-0 whitespace-nowrap min-h-[40px] ${
             activeTab === 'AUDIT'
-              ? 'bg-purple-600 text-white shadow-md'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              ? 'bg-cyan-500 text-slate-950 font-bold'
+              : 'text-slate-400 hover:text-white hover:bg-[#161D2B]'
           }`}
         >
           <Shield className="w-4 h-4" />
-          <span>Security &amp; Audit Logs</span>
+          <span>Security &amp; Audit Logs ({auditLogs.length})</span>
         </button>
       </div>
 
       {/* TAB 1: CLIENT LICENSES */}
       {activeTab === 'LICENSES' && (
         <div className="space-y-4">
-          {/* Controls Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2 flex-1 max-w-md">
               <div className="relative w-full">
@@ -509,20 +615,20 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
                   placeholder="Filter by name, email, account, or HWID..."
                   value={filterQuery}
                   onChange={(e) => setFilterQuery(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-[#0d0e1b] border border-slate-700 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-purple-500"
+                  className="w-full pl-9 pr-3 py-2 bg-[#0F141E] border border-white/[0.1] rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan-500"
                 />
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="flex bg-[#0d0e1b] border border-slate-700 rounded-xl p-1 text-[10px] font-bold">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex bg-[#0F141E] border border-white/[0.08] rounded-xl p-1 text-[11px] font-semibold">
                 {(['ALL', 'ACTIVE', 'EXPIRED', 'REVOKED'] as const).map((st) => (
                   <button
                     key={st}
                     onClick={() => setStatusFilter(st)}
-                    className={`px-2.5 py-1 rounded-lg transition ${
+                    className={`px-2.5 py-1 rounded-lg transition whitespace-nowrap ${
                       statusFilter === st
-                        ? 'bg-purple-600 text-white'
+                        ? 'bg-cyan-500 text-slate-950 font-bold'
                         : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -533,19 +639,18 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
 
               <button
                 onClick={() => setIsIssueModalOpen(true)}
-                className="py-2 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold font-orbitron tracking-wider transition flex items-center gap-1.5 shadow-md"
+                className="py-2 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap shrink-0"
               >
                 <Plus className="w-4 h-4" />
-                <span>+ Issue New License</span>
+                <span>Issue New License</span>
               </button>
             </div>
           </div>
 
-          {/* Licenses Table */}
-          <div className="overflow-x-auto custom-scrollbar rounded-2xl border border-slate-800 bg-[#0a0a14] shadow-xl">
+          <div className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-[#0F141E] shadow-xl">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-slate-800 text-[10px] text-slate-500 uppercase tracking-wider bg-[#0f0f1e]">
+                <tr className="border-b border-white/[0.08] text-[11px] text-slate-400 uppercase tracking-wider bg-[#161D2B]">
                   <th className="p-3">Client &amp; Email</th>
                   <th className="p-3">License Key</th>
                   <th className="p-3">Broker &amp; MT Account</th>
@@ -556,10 +661,10 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
                   <th className="p-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60 font-mono tabular-nums">
+              <tbody className="divide-y divide-white/[0.06] font-mono tabular-nums">
                 {filteredLicenses.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-10 text-center space-y-3">
+                    <td colSpan={8} className="p-10 text-center space-y-3 font-sans">
                       <div className="text-xs text-slate-400">
                         No client licenses matched query &quot;{filterQuery || statusFilter}&quot;.
                       </div>
@@ -568,7 +673,7 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
                           setFilterQuery('');
                           setStatusFilter('ALL');
                         }}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-purple-300 font-bold text-xs border border-slate-700 transition"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#161D2B] hover:bg-[#1E2738] text-cyan-300 font-semibold text-xs border border-white/[0.08] transition"
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
                         <span>Reset Filters</span>
@@ -577,17 +682,17 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
                   </tr>
                 ) : (
                   filteredLicenses.map((lic) => (
-                    <tr key={lic.id} className="hover:bg-[#121124] transition">
-                      <td className="p-3">
-                        <div className="font-bold text-white">{lic.clientName}</div>
-                        <div className="text-[10px] text-slate-400 font-sans">{lic.clientEmail}</div>
+                    <tr key={lic.id} className="hover:bg-[#161D2B] transition">
+                      <td className="p-3 font-sans">
+                        <div className="font-semibold text-white">{lic.clientName}</div>
+                        <div className="text-[11px] text-slate-400">{lic.clientEmail}</div>
                       </td>
                       <td className="p-3">
-                        <div className="flex items-center gap-1.5 font-bold text-purple-300">
+                        <div className="flex items-center gap-1.5 font-semibold text-cyan-300">
                           <span>{lic.key}</span>
                           <button
                             onClick={() => handleCopyKey(lic.key)}
-                            className="text-slate-500 hover:text-white"
+                            className="text-slate-400 hover:text-white"
                             title="Copy Key"
                           >
                             {copiedKey === lic.key ? (
@@ -599,13 +704,13 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
                         </div>
                       </td>
                       <td className="p-3">
-                        <div className="text-slate-200 font-bold">{lic.broker}</div>
-                        <div className="text-[10px] text-cyan-300 font-bold">#{lic.accountNumber}</div>
+                        <div className="text-slate-200 font-sans font-semibold">{lic.broker}</div>
+                        <div className="text-[11px] text-cyan-300">#{lic.accountNumber}</div>
                       </td>
                       <td className="p-3 text-[11px] text-slate-400">{lic.hwid}</td>
-                      <td className="p-3 text-[11px] text-slate-300">{lic.robotName}</td>
+                      <td className="p-3 text-[11px] text-slate-300 font-sans">{lic.robotName}</td>
                       <td className="p-3 text-slate-400 text-[11px]">{lic.expiresAt}</td>
-                      <td className="p-3">
+                      <td className="p-3 font-sans">
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                             lic.status === 'ACTIVE'
@@ -618,21 +723,21 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
                           {lic.status}
                         </span>
                       </td>
-                      <td className="p-3 text-right">
+                      <td className="p-3 text-right font-sans">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
-                            onClick={() => handleExtendExpiry(lic.id, 30)}
-                            className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-purple-300 text-[10px] font-bold"
+                            onClick={() => void handleExtendExpiry(lic.id, 30)}
+                            className="px-2 py-1 rounded-lg bg-[#161D2B] hover:bg-[#1E2738] border border-white/[0.08] text-cyan-300 text-[11px] font-semibold"
                             title="Extend 30 Days"
                           >
                             +30D
                           </button>
                           <button
-                            onClick={() => handleToggleStatus(lic.id)}
-                            className={`px-2 py-1 rounded-lg text-[10px] font-bold ${
+                            onClick={() => void handleToggleStatus(lic.id)}
+                            className={`px-2 py-1 rounded-lg text-[11px] font-semibold ${
                               lic.status === 'ACTIVE'
-                                ? 'bg-rose-950/60 hover:bg-rose-900 text-rose-300'
-                                : 'bg-emerald-950/60 hover:bg-emerald-900 text-emerald-300'
+                                ? 'bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-500/30'
+                                : 'bg-emerald-950/60 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/30'
                             }`}
                           >
                             {lic.status === 'ACTIVE' ? 'Revoke' : 'Activate'}
@@ -650,20 +755,20 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
 
       {/* TAB 2: TERMINALS FLEET */}
       {activeTab === 'TERMINALS' && (
-        <div className="p-6 rounded-3xl bg-[#0a0a14] border border-slate-800 space-y-4 shadow-xl tabular-nums">
+        <div className="p-6 rounded-2xl bg-[#0F141E] border border-white/[0.08] space-y-4 shadow-xl">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
-              <h3 className="text-sm font-black text-white font-orbitron">
-                Connected MetaTrader Fleet Nodes (418)
+              <h3 className="text-sm font-bold text-white">
+                Connected MetaTrader Fleet Nodes ({fleetNodes.length})
               </h3>
-              <p className="text-xs text-slate-400 font-sans">
-                Real-time latency telemetry and live equity utilization across client VPS clusters • Last synced: {lastFleetPingAt}
+              <p className="text-xs text-slate-400 mt-0.5">
+                Live latency telemetry and equity utilization across VPS clusters • Last synced: {lastFleetPingAt}
               </p>
             </div>
             <button
               onClick={handlePingFleet}
               disabled={isPingingFleet}
-              className="py-1.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition"
+              className="py-2 px-3.5 rounded-xl bg-[#161D2B] hover:bg-[#1E2738] text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-white/[0.08] transition whitespace-nowrap"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isPingingFleet ? 'animate-spin text-cyan-400' : ''}`} />
               <span>{isPingingFleet ? 'Pinging...' : 'Ping Fleet'}</span>
@@ -674,31 +779,36 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
             {fleetNodes.map((node) => (
               <div
                 key={node.account}
-                className="p-3.5 rounded-2xl bg-[#0f1020] border border-slate-800 flex items-center justify-between flex-wrap gap-3"
+                className="p-3.5 rounded-xl bg-[#161D2B] border border-white/[0.06] flex items-center justify-between flex-wrap gap-3"
               >
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-purple-500/20 text-purple-300">
+                  <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
                     <Server className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="font-bold text-white text-xs">{node.client} ({node.terminal})</div>
-                    <div className="text-[10px] text-slate-400">
-                      {node.broker} • Account {node.account} • Ping: <span className="text-cyan-300 font-bold">{node.ping}ms</span>
+                    <div className="font-semibold text-white text-xs">
+                      {node.client} ({node.terminal})
+                    </div>
+                    <div className="text-[11px] text-slate-400 font-mono tabular-nums">
+                      {node.broker} • Account {node.account} • Ping:{' '}
+                      <span className="text-cyan-300 font-semibold">{node.ping}ms</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 text-xs">
+                <div className="flex items-center gap-5 text-xs font-mono tabular-nums">
                   <div>
-                    <div className="text-[10px] text-slate-400">Open Trades</div>
-                    <div className="font-bold text-white">{node.trades} Active</div>
+                    <div className="text-[10px] font-sans text-slate-400">Open Trades</div>
+                    <div className="font-semibold text-white">{node.trades} Active</div>
                   </div>
                   <div>
-                    <div className="text-[10px] text-slate-400">Equity</div>
-                    <div className="font-bold text-emerald-400">${node.equity.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                    <div className="text-[10px] font-sans text-slate-400">Equity</div>
+                    <div className="font-semibold text-emerald-400">
+                      ${node.equity.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </div>
                   </div>
                   <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold font-sans ${
                       node.status === 'ONLINE'
                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                         : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
@@ -715,53 +825,66 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
 
       {/* TAB 3: REMOTE PRESET PUSHER */}
       {activeTab === 'PRESETS' && (
-        <div className="p-6 rounded-3xl bg-[#0a0a14] border border-slate-800 space-y-5 shadow-xl">
+        <div className="p-6 rounded-2xl bg-[#0F141E] border border-white/[0.08] space-y-5 shadow-xl">
           <div>
-            <h3 className="text-sm font-black text-white font-orbitron">
-              Remote Strategy &amp; Preset Pusher
-            </h3>
-            <p className="text-xs text-slate-400 font-sans">
-              Update trading parameters across all active client terminals in real-time without requiring client manual re-configuration.
+            <h3 className="text-sm font-bold text-white">Remote Strategy &amp; Preset Pusher</h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Push parameter updates across connected client terminals without manual client reconfiguration.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 rounded-2xl bg-[#0f1020] border border-slate-800 space-y-3">
-              <div className="font-bold text-white text-xs font-orbitron">AlgoMax Prop Safe v5.2</div>
-              <p className="text-[11px] text-slate-400 font-sans">
-                Max Daily Drawdown 3.5%, Trailing Stop 15 pips, News Filter 30m buffer.
-              </p>
+            <div className="p-4 rounded-xl bg-[#161D2B] border border-white/[0.08] space-y-3 flex flex-col justify-between">
+              <div>
+                <div className="font-bold text-white text-xs">AlgoMax Prop Safe v5.2</div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Max Daily Drawdown 3.5%, Trailing Stop 15 pips, News Filter 30m buffer.
+                </p>
+              </div>
               <button
-                onClick={() => showNotice('✅ Pushed AlgoMax Prop Safe v5.2 to 240 active prop challenge terminals.')}
-                className="w-full py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold font-orbitron"
+                onClick={() => {
+                  appendAudit('PRESET_PUSH', `AlgoMax Prop Safe v5.2 -> ${activeLicenseCount} active licenses`);
+                  showNotice(`Pushed AlgoMax Prop Safe v5.2 to ${activeLicenseCount} active client licenses.`);
+                }}
+                className="w-full py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold transition"
               >
-                Push to 240 Clients
+                Push to Active Prop Accounts ({activeLicenseCount})
               </button>
             </div>
 
-            <div className="p-4 rounded-2xl bg-[#0f1020] border border-slate-800 space-y-3">
-              <div className="font-bold text-white text-xs font-orbitron">AlgoMax Gold Aggressive Scalper</div>
-              <p className="text-[11px] text-slate-400 font-sans">
-                Dynamic ATR multiplier 1.5, partial TP at 25 pips, breakeven armed at +10 pips.
-              </p>
+            <div className="p-4 rounded-xl bg-[#161D2B] border border-white/[0.08] space-y-3 flex flex-col justify-between">
+              <div>
+                <div className="font-bold text-white text-xs">AlgoMax Gold Aggressive Scalper</div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Dynamic ATR multiplier 1.5, partial TP at 25 pips, breakeven armed at +10 pips.
+                </p>
+              </div>
               <button
-                onClick={() => showNotice('✅ Pushed Gold Aggressive Scalper to 128 active terminals.')}
-                className="w-full py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold font-orbitron"
+                onClick={() => {
+                  appendAudit('PRESET_PUSH', `Gold Aggressive Scalper -> ${fleetNodes.length} VPS nodes`);
+                  showNotice(`Pushed Gold Aggressive Scalper to ${fleetNodes.length} fleet nodes.`);
+                }}
+                className="w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition"
               >
-                Push to 128 Clients
+                Push to Fleet Nodes ({fleetNodes.length})
               </button>
             </div>
 
-            <div className="p-4 rounded-2xl bg-[#0f1020] border border-slate-800 space-y-3">
-              <div className="font-bold text-white text-xs font-orbitron">Pre-News High Volatility Mode</div>
-              <p className="text-[11px] text-slate-400 font-sans">
-                Tightens spread filter to 1.8 pips and suspends market orders on GBP and USD.
-              </p>
+            <div className="p-4 rounded-xl bg-[#161D2B] border border-white/[0.08] space-y-3 flex flex-col justify-between">
+              <div>
+                <div className="font-bold text-white text-xs">Pre-News High Volatility Mode</div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Tightens spread filter to 1.8 pips and suspends market orders on GBP and USD.
+                </p>
+              </div>
               <button
-                onClick={() => showNotice('✅ Pushed Pre-News Volatility Mode to ALL 418 terminals.')}
-                className="w-full py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold font-orbitron"
+                onClick={() => {
+                  appendAudit('PRESET_BROADCAST', `Pre-News Volatility Mode -> All ${fleetNodes.length} nodes`);
+                  showNotice(`Broadcast Pre-News Volatility Mode to all ${fleetNodes.length} terminals.`);
+                }}
+                className="w-full py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition"
               >
-                Broadcast to All
+                Broadcast to All Nodes
               </button>
             </div>
           </div>
@@ -770,52 +893,21 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
 
       {/* TAB 4: AUDIT LOGS */}
       {activeTab === 'AUDIT' && (
-        <div className="p-6 rounded-3xl bg-[#0a0a14] border border-slate-800 space-y-4 shadow-xl">
-          <div className="text-sm font-black text-white font-orbitron">
-            Security &amp; Master Command Audit Log
-          </div>
+        <div className="p-6 rounded-2xl bg-[#0F141E] border border-white/[0.08] space-y-4 shadow-xl">
+          <div className="text-sm font-bold text-white">Security &amp; Master Command Audit Log</div>
           <div className="space-y-2 text-xs">
-            {[
-              {
-                time: '2 mins ago',
-                action: 'LICENSE_EXTEND',
-                target: 'Alex Mercer (ThinkMarkets #8839210)',
-                admin: 'thulanimyeni19712@gmail.com',
-                status: 'SUCCESS',
-              },
-              {
-                time: '14 mins ago',
-                action: 'PRESET_BROADCAST',
-                target: 'AlgoMax Prop Safe v5.2 to 240 terminals',
-                admin: 'thulanimyeni19712@gmail.com',
-                status: 'SUCCESS',
-              },
-              {
-                time: '1 hour ago',
-                action: 'LICENSE_ISSUE',
-                target: 'Apex Quant Fund (IC Markets #50294112)',
-                admin: 'thulanimyeni19712@gmail.com',
-                status: 'SUCCESS',
-              },
-              {
-                time: '3 hours ago',
-                action: 'KILL_SWITCH_TEST',
-                target: 'Global Test Cluster LD4',
-                admin: 'thulanimyeni19712@gmail.com',
-                status: 'PASSED',
-              },
-            ].map((log, i) => (
+            {auditLogs.map((log, i) => (
               <div
                 key={i}
-                className="p-3 rounded-xl bg-[#0f1020] border border-slate-800 flex items-center justify-between text-slate-300 font-mono text-[11px]"
+                className="p-3 rounded-xl bg-[#161D2B] border border-white/[0.06] flex items-center justify-between text-slate-300 font-mono text-xs gap-3"
               >
                 <div>
-                  <span className="font-bold text-purple-300">{log.action}</span> • {log.target}
-                  <div className="text-[10px] text-slate-500">By {log.admin}</div>
+                  <span className="font-bold text-cyan-300">{log.action}</span> • {log.target}
+                  <div className="text-[11px] text-slate-500 font-sans">By {log.admin}</div>
                 </div>
-                <div className="text-right">
+                <div className="text-right shrink-0">
                   <span className="text-emerald-400 font-bold block">{log.status}</span>
-                  <span className="text-slate-500 text-[10px]">{log.time}</span>
+                  <span className="text-slate-500 text-[11px] tabular-nums">{log.time}</span>
                 </div>
               </div>
             ))}
@@ -825,18 +917,16 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
 
       {/* ISSUE NEW LICENSE MODAL */}
       {isIssueModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200 font-mono">
-          <div className="w-full max-w-lg bg-[#0d0e1b] border-2 border-purple-500/70 rounded-3xl p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg bg-[#0F141E] border border-white/[0.1] rounded-2xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
               <div className="flex items-center gap-2">
-                <Plus className="w-5 h-5 text-purple-400" />
-                <h3 className="text-base font-black text-white font-orbitron">
-                  ISSUE NEW CLIENT LICENSE
-                </h3>
+                <Plus className="w-5 h-5 text-cyan-400" />
+                <h3 className="text-base font-bold text-white">Issue New Client License</h3>
               </div>
               <button
                 onClick={() => setIsIssueModalOpen(false)}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-white bg-slate-800"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white bg-[#161D2B]"
               >
                 &times;
               </button>
@@ -845,71 +935,73 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
             <form onSubmit={handleIssueLicenseSubmit} className="space-y-3.5 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">Client Full Name</label>
+                  <label className="text-slate-300 font-semibold block mb-1">Client Full Name</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. David Zhang"
                     value={newClientName}
                     onChange={(e) => setNewClientName(e.target.value)}
-                    className="w-full py-2 px-3 bg-[#131424] border border-slate-700 rounded-xl text-white font-bold"
+                    className="w-full py-2 px-3 bg-[#161D2B] border border-white/[0.1] rounded-xl text-white"
                   />
                 </div>
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">Client Email</label>
+                  <label className="text-slate-300 font-semibold block mb-1">Client Email</label>
                   <input
                     type="email"
                     required
                     placeholder="d.zhang@quantedge.sg"
                     value={newClientEmail}
                     onChange={(e) => setNewClientEmail(e.target.value)}
-                    className="w-full py-2 px-3 bg-[#131424] border border-slate-700 rounded-xl text-white"
+                    className="w-full py-2 px-3 bg-[#161D2B] border border-white/[0.1] rounded-xl text-white"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">Broker Name</label>
+                  <label className="text-slate-300 font-semibold block mb-1">Broker Name</label>
                   <input
                     type="text"
                     required
                     value={newBroker}
                     onChange={(e) => setNewBroker(e.target.value)}
-                    className="w-full py-2 px-3 bg-[#131424] border border-slate-700 rounded-xl text-white font-bold"
+                    className="w-full py-2 px-3 bg-[#161D2B] border border-white/[0.1] rounded-xl text-white"
                   />
                 </div>
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">MT5 / MT4 Account #</label>
+                  <label className="text-slate-300 font-semibold block mb-1">MT5 / MT4 Account #</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. 8940122"
                     value={newAccountNumber}
                     onChange={(e) => setNewAccountNumber(e.target.value)}
-                    className="w-full py-2 px-3 bg-[#131424] border border-slate-700 rounded-xl text-white font-mono"
+                    className="w-full py-2 px-3 bg-[#161D2B] border border-white/[0.1] rounded-xl text-white font-mono"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-slate-300 font-bold block mb-1">Hardware ID (HWID) or Auto-Lock</label>
+                <label className="text-slate-300 font-semibold block mb-1">
+                  Hardware ID (HWID) or Auto-Lock
+                </label>
                 <input
                   type="text"
                   placeholder="Leave blank for auto-binding on first MT5 terminal ping"
                   value={newHwid}
                   onChange={(e) => setNewHwid(e.target.value)}
-                  className="w-full py-2 px-3 bg-[#131424] border border-slate-700 rounded-xl text-purple-300 font-mono"
+                  className="w-full py-2 px-3 bg-[#161D2B] border border-white/[0.1] rounded-xl text-cyan-300 font-mono"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">Robot Strategy</label>
+                  <label className="text-slate-300 font-semibold block mb-1">Robot Strategy</label>
                   <select
                     value={newStrategy}
                     onChange={(e) => setNewStrategy(e.target.value)}
-                    className="w-full py-2 px-2 bg-[#131424] border border-slate-700 rounded-xl text-white"
+                    className="w-full py-2 px-2 bg-[#161D2B] border border-white/[0.1] rounded-xl text-white"
                   >
                     <option value="AlgoMax Prop Pass v5.2">AlgoMax Prop Pass v5.2</option>
                     <option value="AlgoMax Institutional Gold">AlgoMax Institutional Gold</option>
@@ -919,11 +1011,11 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
                 </div>
 
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">License Tier</label>
+                  <label className="text-slate-300 font-semibold block mb-1">License Tier</label>
                   <select
                     value={newPlanType}
                     onChange={(e) => setNewPlanType(e.target.value as 'STARTER' | 'PROP' | 'LIFETIME')}
-                    className="w-full py-2 px-2 bg-[#131424] border border-slate-700 rounded-xl text-white"
+                    className="w-full py-2 px-2 bg-[#161D2B] border border-white/[0.1] rounded-xl text-white"
                   >
                     <option value="STARTER">Starter (1 Account)</option>
                     <option value="PROP">Prop Pass (3 Accounts)</option>
@@ -934,9 +1026,9 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
 
               <button
                 type="submit"
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black font-orbitron tracking-wider text-xs transition shadow-lg mt-2"
+                className="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition mt-2"
               >
-                CREATE &amp; BROADCAST LICENSE KEY
+                Create &amp; Broadcast License Key
               </button>
             </form>
           </div>
@@ -945,45 +1037,50 @@ export const AlgoAdminPortalView: React.FC<AlgoAdminPortalViewProps> = ({ onOpen
 
       {/* EMERGENCY GLOBAL KILL SWITCH MODAL */}
       {isKillSwitchModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200 font-mono">
-          <div className="w-full max-w-md bg-[#130b14] border-2 border-rose-500 rounded-3xl p-6 shadow-[0_0_60px_rgba(244,63,94,0.4)] space-y-4 text-center">
-            <div className="p-3.5 rounded-full bg-rose-500/20 text-rose-400 w-fit mx-auto animate-pulse">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-[#0F141E] border border-rose-500/60 rounded-2xl p-6 shadow-2xl space-y-4 text-center">
+            <div className="p-3.5 rounded-full bg-rose-500/20 text-rose-400 w-fit mx-auto">
               <AlertTriangle className="w-8 h-8" />
             </div>
 
             <div>
-              <h3 className="text-lg font-black text-white font-orbitron">
-                {isGlobalFrozen ? 'UNFREEZE CLIENT FLEET?' : 'EMERGENCY FLEET FREEZE'}
+              <h3 className="text-lg font-bold text-white">
+                {isGlobalFrozen ? 'Unfreeze Client Fleet?' : 'Emergency Fleet Freeze'}
               </h3>
-              <p className="text-xs text-rose-200 font-sans mt-1">
+              <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
                 {isGlobalFrozen
-                  ? 'Resuming trading will re-arm automated execution on all 418 connected client MetaTrader instances.'
-                  : 'This broadcasts an immediate HALT & LIQUIDATE command to all 418 client terminals worldwide, preventing breach during extreme black-swan market volatility.'}
+                  ? `Resuming trading will re-arm automated execution across ${fleetNodes.length} registered fleet nodes.`
+                  : `This broadcasts a HALT & LIQUIDATE command across ${fleetNodes.length} registered fleet nodes to prevent drawdown breach.`}
               </p>
             </div>
 
             <div className="flex gap-3 pt-2">
               <button
                 onClick={() => setIsKillSwitchModalOpen(false)}
-                className="flex-1 py-3 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs"
+                className="flex-1 py-2.5 rounded-xl bg-[#161D2B] hover:bg-[#1E2738] text-slate-300 font-semibold text-xs border border-white/[0.08]"
               >
                 Cancel
               </button>
               <button
                 onClick={() => {
-                  setIsGlobalFrozen((prev) => !prev);
+                  const nextFrozen = !isGlobalFrozen;
+                  setIsGlobalFrozen(nextFrozen);
                   setIsKillSwitchModalOpen(false);
+                  appendAudit(
+                    nextFrozen ? 'GLOBAL_FREEZE' : 'GLOBAL_UNFREEZE',
+                    `${fleetNodes.length} fleet nodes`
+                  );
                   showNotice(
-                    isGlobalFrozen
-                      ? 'Client fleet resumed.'
-                      : '🚨 EMERGENCY COMMAND BROADCAST: All 418 terminals frozen and protected.'
+                    nextFrozen
+                      ? `Emergency freeze broadcast across ${fleetNodes.length} fleet terminals.`
+                      : 'Client fleet resumed.'
                   );
                 }}
-                className={`flex-1 py-3 rounded-xl text-white font-black font-orbitron text-xs transition shadow-lg ${
+                className={`flex-1 py-2.5 rounded-xl text-white font-bold text-xs transition ${
                   isGlobalFrozen ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'
                 }`}
               >
-                {isGlobalFrozen ? 'UNFREEZE FLEET' : 'CONFIRM FREEZE'}
+                {isGlobalFrozen ? 'Unfreeze Fleet' : 'Confirm Freeze'}
               </button>
             </div>
           </div>

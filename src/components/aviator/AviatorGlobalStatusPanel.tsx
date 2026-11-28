@@ -10,8 +10,14 @@ import {
   ArrowUpRight,
   Play,
   Pause,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { AviatorSubTab } from './NguniAviatorApp';
+import {
+  speechNotifier,
+  useSpeechNotifications,
+} from '../../services/speechNotificationService';
 
 interface AviatorGlobalStatusPanelProps {
   onNavigateTab?: (tab: AviatorSubTab) => void;
@@ -42,6 +48,8 @@ export const AviatorGlobalStatusPanel: React.FC<AviatorGlobalStatusPanelProps> =
     ticksPerSecond,
     isBridgeConnected,
   } = useTrading();
+
+  const { settings: speechSettings } = useSpeechNotifications();
 
   // Compute aggregate signal accuracy from live EA win/loss track record + active AI confidence
   const totalEaTrades = eaWinCount + eaLossCount;
@@ -83,7 +91,7 @@ export const AviatorGlobalStatusPanel: React.FC<AviatorGlobalStatusPanelProps> =
             <Gauge className="w-4 h-4" />
           </div>
           <div>
-            <h2 className="text-xs sm:text-sm font-orbitron font-bold text-white tracking-wide">
+            <h2 className="text-xs sm:text-sm font-display font-bold text-white tracking-wide">
               Global Status
             </h2>
             <p className="text-[11px] text-slate-400 font-sans">
@@ -93,6 +101,21 @@ export const AviatorGlobalStatusPanel: React.FC<AviatorGlobalStatusPanelProps> =
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              speechNotifier.updateSettings({ enabled: !speechSettings.enabled })
+            }
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 whitespace-nowrap shrink-0 border ${
+              speechSettings.enabled
+                ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/35 hover:bg-cyan-500/25'
+                : 'bg-slate-900 text-slate-400 border-white/10 hover:text-white'
+            }`}
+            title={speechSettings.enabled ? 'Mute Voice Announcer' : 'Unmute Voice Announcer'}
+          >
+            {speechSettings.enabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+            <span>{speechSettings.enabled ? 'Voice On' : 'Voice Off'}</span>
+          </button>
           <button
             type="button"
             onClick={toggleEaBot}
@@ -197,7 +220,7 @@ export const AviatorGlobalStatusPanel: React.FC<AviatorGlobalStatusPanelProps> =
         <div className="py-2 sm:py-0 sm:pl-4 flex flex-col justify-between gap-1">
           <div className="flex items-center justify-between text-[11px] text-slate-400">
             <span className="font-sans font-medium flex items-center gap-1.5">
-              <Radio className="w-3.5 h-3.5 text-purple-400" />
+              <Radio className="w-3.5 h-3.5 text-cyan-400" />
               Engine &amp; Positions
             </span>
             <span

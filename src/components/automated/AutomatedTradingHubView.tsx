@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useTrading } from '../../context/TradingContext';
+import { useBrand } from '../../context/BrandContext';
 import { MT5BrokerConnectionModal } from '../mt5/MT5BrokerConnectionModal';
 import {
   ResponsiveContainer,
@@ -45,6 +46,7 @@ import {
 import { OrderSide } from '../../types/trading';
 
 export const AutomatedTradingHubView: React.FC = () => {
+  const { brand, accent } = useBrand();
   const {
     mt5Credentials,
     automatedSettings,
@@ -54,8 +56,16 @@ export const AutomatedTradingHubView: React.FC = () => {
     setPrimaryMT5Broker,
     robots,
     positions,
+    orderHistory,
+    accountBalance,
+    accountEquity,
+    unrealizedPnL,
     prices,
     executeOrder,
+    autonomousSnapshots,
+    autonomousDecisions,
+    isAutonomousScanning,
+    runAutonomousCycle,
   } = useTrading();
 
   const [isConnectModalOpen, setIsConnectModalOpen] = useState<boolean>(false);
@@ -67,10 +77,17 @@ export const AutomatedTradingHubView: React.FC = () => {
   const [showBenchmark, setShowBenchmark] = useState<boolean>(true);
   const [showFloor, setShowFloor] = useState<boolean>(true);
 
-  // Daily equity growth dataset synthesized from starting balance ($48,000) to current equity ($52,480)
-  const equityGrowthData = useMemo(() => {
-    const daysCount = timeRange === '7D' ? 7 : timeRange === '30D' ? 30 : timeRange === '90D' ? 90 : 120;
-    const baseDeposit = 48000;
+  // Real-time equity curve computed chronologically from actual orderHistory + live floating equity
+  const equityStatsBundle = useMemo(() => {
+    const chronoClosed = [...orderHistory].reverse();
+    const totalClosedNet = chronoClosed.reduce(
+      (sum, item) => sum + item.profit + item.commission + item.swap,
+      0
+    );
+    const baseDeposit = Number((accountBalance - totalClosedNet).toFixed(2));
+
+    let running = baseDeposit;
+    let peak = baseDeposit;
     const points: {
       date: string;
       equity: number;
@@ -79,55 +96,84 @@ export const AutomatedTradingHubView: React.FC = () => {
       highWaterMark: number;
       floor: number;
       benchmark: number;
-    }[] = [];
-
-    let runningEquity = baseDeposit;
-    let currentPeak = baseDeposit;
-    const now = new Date();
-
-    const deltas = [
-      +180, +320, -110, +450, +290, +620, -180, +410, +530, -90,
-      +340, +610, +190, -140, +480, +720, -210, +390, +510, +260,
-      -80, +470, +650, +310, -120, +580, +430, +690, -150, +520,
+    }[] = [
+      {
+        date: 'Start',
+        equity: Number(baseDeposit.toFixed(2)),
+        profit: 0,
+        dailyPnL: 0,
+        highWaterMark: Number(baseDeposit.toFixed(2)),
+        floor: Number((baseDeposit * 0.965).toFixed(2)),
+        benchmark: Number(baseDeposit.toFixed(2)),
+      },
     ];
 
-    for (let i = daysCount - 1; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
-      const idx = (daysCount - 1 - i) % deltas.length;
-      const dailyChange = deltas[idx];
-      runningEquity += dailyChange;
-      if (runningEquity > currentPeak) {
-        currentPeak = runningEquity;
-      }
-
-      // Benchmark passive baseline drift
-      const benchmarkVal = Math.round(baseDeposit * (1 + ((daysCount - i) / 365) * 0.12));
-
+    chronoClosed.forEach((ord, idx) => {
+      const net = Number((ord.profit + ord.commission + ord.swap).toFixed(2));
+      running = Number((running + net).toFixed(2));
+      if (running > peak) peak = running;
+      const stepLabel = ord.closeTime
+        ? ord.closeTime.slice(5, 16)
+        : `#${ord.ticket}`;
+      const benchmarkDrift = Number(
+        (baseDeposit * (1 + ((idx + 1) / Math.max(10, chronoClosed.length * 4)) * 0.04)).toFixed(2)
+      );
       points.push({
-        date: dateStr,
-        equity: runningEquity,
-        profit: runningEquity - baseDeposit,
-        dailyPnL: dailyChange,
-        highWaterMark: currentPeak,
-        floor: Math.round(currentPeak * 0.965), // 3.5% hard stop floor
-        benchmark: benchmarkVal,
+        date: stepLabel,
+        equity: running,
+        profit: Number((running - baseDeposit).toFixed(2)),
+        dailyPnL: net,
+        highWaterMark: Number(peak.toFixed(2)),
+        floor: Number((peak * 0.965).toFixed(2)),
+        benchmark: benchmarkDrift,
       });
-    }
+    });
 
-    return points;
-  }, [timeRange]);
+    // Final live mark-to-market point
+    const livePeak = Math.max(peak, accountEquity);
+    points.push({
+      date: 'LIVE',
+      equity: accountEquity,
+      profit: Number((accountEquity - baseDeposit).toFixed(2)),
+      dailyPnL: Number(unrealizedPnL.toFixed(2)),
+      highWaterMark: Number(livePeak.toFixed(2)),
+      floor: Number((livePeak * 0.965).toFixed(2)),
+      benchmark: Number((baseDeposit * 1.015).toFixed(2)),
+    });
+
+    const filteredPoints =
+      timeRange === '7D'
+        ? points.slice(-8)
+        : timeRange === '30D'
+        ? points.slice(-24)
+        : points;
+
+    const wins = chronoClosed.filter((c) => c.profit > 0);
+    const losses = chronoClosed.filter((c) => c.profit < 0);
+    const grossWin = wins.reduce((s, c) => s + c.profit, 0);
+    const grossLoss = Math.abs(losses.reduce((s, c) => s + c.profit, 0));
+    const profitFactor =
+      grossLoss > 0 ? Number((grossWin / grossLoss).toFixed(2)) : grossWin > 0 ? 4.5 : 1.0;
+    const winRatePct =
+      chronoClosed.length > 0
+        ? Number(((wins.length / chronoClosed.length) * 100).toFixed(1))
+        : 0;
+
+    return {
+      baseDeposit,
+      points: filteredPoints,
+      profitFactor,
+      winRatePct,
+      closedCount: chronoClosed.length,
+    };
+  }, [orderHistory, accountBalance, accountEquity, unrealizedPnL, timeRange]);
+
+  const equityGrowthData = equityStatsBundle.points;
 
   const periodStats = useMemo(() => {
-    const baseDeposit = 48000;
-    const latest = equityGrowthData[equityGrowthData.length - 1];
-    const currentEquity = latest?.equity ?? baseDeposit;
-    const periodProfit = currentEquity - baseDeposit;
-    const returnPct = (periodProfit / baseDeposit) * 100;
-    const benchmarkGain = (latest?.benchmark ?? baseDeposit) - baseDeposit;
-    const alphaUsd = periodProfit - benchmarkGain;
+    const baseDeposit = equityStatsBundle.baseDeposit || 100000;
+    const periodProfit = Number((accountEquity - baseDeposit).toFixed(2));
+    const returnPct = baseDeposit > 0 ? (periodProfit / baseDeposit) * 100 : 0;
 
     let maxDdPct = 0;
     for (const pt of equityGrowthData) {
@@ -137,49 +183,42 @@ export const AutomatedTradingHubView: React.FC = () => {
       }
     }
 
+    const latestBenchmark =
+      equityGrowthData.length > 0
+        ? equityGrowthData[equityGrowthData.length - 1].benchmark
+        : baseDeposit;
+    const alphaUsd = Number((accountEquity - latestBenchmark).toFixed(2));
+
     return {
-      currentEquity,
+      currentEquity: accountEquity,
       periodProfit,
       returnPct,
-      alphaUsd,
       maxDdPct: maxDdPct || 0,
       safetyBufferPct: Math.max(0, 3.5 - maxDdPct),
+      alphaUsd,
     };
-  }, [equityGrowthData]);
+  }, [equityGrowthData, equityStatsBundle.baseDeposit, accountEquity]);
 
-  // Live decision telemetry stream
-  const [liveBotLogs, setLiveBotLogs] = useState([
-    {
-      time: '01:12:44',
-      bot: 'Endgame HFT Scalper',
-      symbol: 'XAUUSD',
-      action: 'BUY' as OrderSide,
-      price: 2735.65,
-      reason: 'M5 FVG Rebalance + Liquidity Sweep',
-      protection: 'Break-Even @ +12 pips | Trailing Stop Armed',
-      latency: '1.4ms',
-    },
-    {
-      time: '01:05:12',
-      bot: 'Shadow River SMC',
-      symbol: 'US30',
-      action: 'BUY' as OrderSide,
-      price: 43751.0,
-      reason: 'NY Pre-market Demand Block Retest',
-      protection: 'Max Risk 0.75% | Target 1:3 RR',
-      latency: '2.1ms',
-    },
-    {
-      time: '00:52:19',
-      bot: 'Apex Liquidity Scalper',
-      symbol: 'EURUSD',
-      action: 'SELL' as OrderSide,
-      price: 1.08420,
-      reason: 'Asian High Breakout Rejection',
-      protection: 'Slippage Filter < 1.5 pips',
-      latency: '1.8ms',
-    },
-  ]);
+  const snapshotList = useMemo(
+    () => Object.values(autonomousSnapshots),
+    [autonomousSnapshots]
+  );
+
+  // Merge live autonomous engine decisions with open position protections
+  const liveDecisionFeed = useMemo(() => {
+    if (autonomousDecisions.length > 0) return autonomousDecisions;
+    return positions.slice(0, 6).map((p) => ({
+      id: `pos-live-${p.id}`,
+      timestamp: p.openTime.slice(11, 19) || 'LIVE',
+      bot: p.comment || 'MT5 Position Monitor',
+      symbol: p.symbol,
+      action: p.side,
+      price: p.currentPrice,
+      reason: `Active floating ${p.pips >= 0 ? '+' : ''}${p.pips} pips ($${p.profit.toFixed(2)})`,
+      protection: p.sl ? `SL ${p.sl}${p.isTrailing ? ' · Trailing Active' : ''}` : 'Awaiting BE Target',
+      latencyMs: 1.4,
+    }));
+  }, [autonomousDecisions, positions]);
 
   // Execute a live automated trade with institutional capital preservation
   const handleTriggerProtectedTrade = async (symbol = 'XAUUSD', side: OrderSide = 'BUY') => {
@@ -208,17 +247,6 @@ export const AutomatedTradingHubView: React.FC = () => {
 
     if (res.success) {
       setTriggerNotification(`Executed protected ${side} 1.00 lot ${symbol} with Break-Even & Trailing Profit Lock!`);
-      const newLog = {
-        time: new Date().toLocaleTimeString(),
-        bot: 'Endgame Auto-Pilot Pro',
-        symbol,
-        action: side,
-        price: currentPrice,
-        reason: 'Autonomous Volatility Expansion & Liquidity Flow',
-        protection: 'SL strictly capped at 0.75% | Trailing Active',
-        latency: '1.2ms',
-      };
-      setLiveBotLogs((prev) => [newLog, ...prev]);
       setTimeout(() => setTriggerNotification(null), 5000);
     }
     setIsTriggeringAutoTrade(false);
@@ -227,16 +255,15 @@ export const AutomatedTradingHubView: React.FC = () => {
   return (
     <div className="space-y-6 font-mono text-xs">
       {/* Top Banner & Master Control Switch */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[#0a1829] via-[#08121f] to-[#150e26] border border-cyan-500/40 p-6 md:p-8 shadow-2xl">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative rounded-2xl overflow-hidden glass-ultra border border-white/[0.12] p-6 md:p-8 shadow-xl">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="max-w-3xl space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-medium">
+            <div className="flex items-center gap-2 text-cyan-300 text-xs font-medium">
               <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Titan Autonomous AI Matrix • Capital Defense &amp; Profit Engine</span>
+              <span>{brand.brandName} Autonomous AI Matrix · Capital Defense &amp; Profit Engine</span>
             </div>
-            <h2 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
-              Best-In-Class Autonomous Trading Systems
+            <h2 className="text-2xl md:text-3xl font-bold text-white font-display tracking-tight">
+              Autonomous Risk &amp; Execution Systems
             </h2>
             <p className="text-sm text-slate-300 leading-relaxed font-sans">
               Dual-engine algorithmic execution: <strong>Engine 1 (Zero-Ruin Floor)</strong> protects against account drawdown with hard 3.5% stops, spread shields, and news filters. <strong>Engine 2 (Profit Multiplier)</strong> ratchets trailing stops, takes partial profits, and compounds winners using strictly positive expectancy.
@@ -253,7 +280,7 @@ export const AutomatedTradingHubView: React.FC = () => {
                   : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-950/60 border border-rose-400/40'
               }`}
             >
-              <Power className="w-4 h-4 animate-pulse" />
+              <Power className="w-4 h-4" />
               <span>
                 {automatedSettings.masterAutoTrading ? 'Auto-Trading: ACTIVE' : 'Auto-Trading: PAUSED'}
               </span>
@@ -282,7 +309,7 @@ export const AutomatedTradingHubView: React.FC = () => {
       )}
 
       {/* RECHARTS VISUALIZATION: DAILY EQUITY GROWTH & COMPOUNDING TRAJECTORY */}
-      <div className="bg-[#0b0e17] border border-cyan-500/30 rounded-3xl p-5 sm:p-6 space-y-5 shadow-2xl relative overflow-hidden">
+      <div className="bg-[#0F141E] border border-white/[0.08] rounded-2xl p-5 sm:p-6 space-y-5 relative overflow-hidden">
         {/* Header Strip with Controls & Legend Toggles */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
           <div className="space-y-1">
@@ -290,7 +317,7 @@ export const AutomatedTradingHubView: React.FC = () => {
               <span className="p-1.5 rounded-lg bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
                 <BarChart3 className="w-4 h-4" />
               </span>
-              <h3 className="text-sm font-orbitron font-black text-white uppercase tracking-wider">
+              <h3 className="text-sm font-sans font-black text-white uppercase tracking-wider">
                 DAILY EQUITY GROWTH &amp; COMPOUNDING TRAJECTORY
               </h3>
             </div>
@@ -330,7 +357,7 @@ export const AutomatedTradingHubView: React.FC = () => {
                 <button
                   key={t}
                   onClick={() => setTimeRange(t)}
-                  className={`px-2.5 py-1 text-xs font-orbitron font-bold rounded-lg transition ${
+                  className={`px-2.5 py-1 text-xs font-sans font-bold rounded-lg transition ${
                     timeRange === t
                       ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
@@ -345,35 +372,35 @@ export const AutomatedTradingHubView: React.FC = () => {
 
         {/* 4 Summary Performance Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-3.5 space-y-1">
-            <span className="text-[10px] font-orbitron text-slate-400 block uppercase">CURRENT EQUITY ({timeRange})</span>
+          <div className="glass-card rounded-2xl p-3.5 space-y-1">
+            <span className="text-[10px] font-sans font-semibold text-slate-400 block uppercase">LIVE ACCOUNT EQUITY ({timeRange})</span>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-xl sm:text-2xl font-black font-orbitron text-cyan-400 text-glow-cyan tabular-nums">
+              <span className="text-xl sm:text-2xl font-black font-mono text-cyan-400 tabular-nums">
                 ${periodStats.currentEquity.toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </span>
             </div>
-            <div className="flex items-center gap-1 text-[11px] font-mono text-emerald-400 tabular-nums">
+            <div className={`flex items-center gap-1 text-[11px] font-mono tabular-nums ${periodStats.periodProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
               <TrendingUp className="w-3 h-3" />
               <span>
-                +${periodStats.periodProfit.toLocaleString()} (+{periodStats.returnPct.toFixed(2)}%)
+                {periodStats.periodProfit >= 0 ? '+' : '-'}${Math.abs(periodStats.periodProfit).toLocaleString()} ({periodStats.returnPct >= 0 ? '+' : ''}{periodStats.returnPct.toFixed(2)}%)
               </span>
             </div>
           </div>
 
-          <div className="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-3.5 space-y-1">
-            <span className="text-[10px] font-orbitron text-slate-400 block uppercase">PEAK HIGH-WATER MARK</span>
+          <div className="glass-card rounded-2xl p-3.5 space-y-1">
+            <span className="text-[10px] font-sans font-semibold text-slate-400 block uppercase">PEAK HIGH-WATER MARK</span>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-xl sm:text-2xl font-black font-orbitron text-emerald-400 text-glow-green tabular-nums">
+              <span className="text-xl sm:text-2xl font-black font-mono text-emerald-400 tabular-nums">
                 ${Math.max(...equityGrowthData.map((d) => d.highWaterMark)).toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </span>
             </div>
             <span className="text-[10px] text-slate-400 font-mono block">3.5% hard floor ratchet active</span>
           </div>
 
-          <div className="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-3.5 space-y-1">
-            <span className="text-[10px] font-orbitron text-slate-400 block uppercase">MAX DRAWDOWN ({timeRange})</span>
+          <div className="glass-card rounded-2xl p-3.5 space-y-1">
+            <span className="text-[10px] font-sans font-semibold text-slate-400 block uppercase">MAX DRAWDOWN ({timeRange})</span>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-xl sm:text-2xl font-black font-orbitron text-emerald-400 tabular-nums">
+              <span className="text-xl sm:text-2xl font-black font-mono text-emerald-400 tabular-nums">
                 -{periodStats.maxDdPct.toFixed(2)}%
               </span>
               <span className="text-xs text-slate-400 font-mono">Max DD</span>
@@ -383,15 +410,15 @@ export const AutomatedTradingHubView: React.FC = () => {
             </span>
           </div>
 
-          <div className="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-3.5 space-y-1">
-            <span className="text-[10px] font-orbitron text-slate-400 block uppercase">SHARPE &amp; PROFIT FACTOR</span>
+          <div className="glass-card rounded-2xl p-3.5 space-y-1">
+            <span className="text-[10px] font-sans font-semibold text-slate-400 block uppercase">PROFIT FACTOR &amp; WIN RATE</span>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-xl sm:text-2xl font-black font-orbitron text-amber-400 text-glow-gold tabular-nums">
-                3.42
+              <span className="text-xl sm:text-2xl font-black font-mono text-amber-400 tabular-nums">
+                {equityStatsBundle.profitFactor.toFixed(2)}
               </span>
-              <span className="text-xs text-slate-400 font-mono">Sharpe</span>
+              <span className="text-xs text-slate-400 font-mono">PF ({equityStatsBundle.closedCount} Trades)</span>
             </div>
-            <span className="text-[10px] text-cyan-300 font-mono block tabular-nums">Profit Factor: 2.84 • Win Rate: 78.4%</span>
+            <span className="text-[10px] text-cyan-300 font-mono block tabular-nums">Realized Win Rate: {equityStatsBundle.winRatePct}%</span>
           </div>
         </div>
 
@@ -401,7 +428,7 @@ export const AutomatedTradingHubView: React.FC = () => {
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-1 rounded-full bg-cyan-400" />
-                <span className="text-slate-200 font-bold">Titan Autonomous Equity</span>
+                <span className="text-slate-200 font-bold">{brand.brandName} Autonomous Equity</span>
               </div>
               {showBenchmark && (
                 <div className="flex items-center gap-1.5">
@@ -457,7 +484,7 @@ export const AutomatedTradingHubView: React.FC = () => {
                     return (
                       <div className="bg-slate-950/95 border border-cyan-500/40 p-3 rounded-xl text-xs font-mono shadow-2xl space-y-1.5">
                         <div className="flex items-center justify-between gap-4 border-b border-slate-800 pb-1">
-                          <span className="font-bold text-cyan-300 font-orbitron">{d.date}</span>
+                          <span className="font-bold text-cyan-300 font-sans">{d.date}</span>
                           <span
                             className={`font-bold ${
                               d.dailyPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'
@@ -489,10 +516,15 @@ export const AutomatedTradingHubView: React.FC = () => {
                   }}
                 />
                 <ReferenceLine
-                  y={48000}
+                  y={equityStatsBundle.baseDeposit}
                   stroke="#475569"
                   strokeDasharray="3 3"
-                  label={{ value: 'Initial Deposit: $48,000', fill: '#64748b', fontSize: 10, position: 'insideBottomRight' }}
+                  label={{
+                    value: `Initial Capital: $${Math.round(equityStatsBundle.baseDeposit).toLocaleString()}`,
+                    fill: '#64748b',
+                    fontSize: 10,
+                    position: 'insideBottomRight',
+                  }}
                 />
 
                 {/* Primary Equity Area Under Line */}
@@ -575,7 +607,7 @@ export const AutomatedTradingHubView: React.FC = () => {
                 </p>
               </div>
             </div>
-            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+            <span className="text-[11px] font-mono font-bold text-emerald-400 shrink-0">
               SHIELD ARMED
             </span>
           </div>
@@ -624,7 +656,7 @@ export const AutomatedTradingHubView: React.FC = () => {
             <div className="p-3.5 bg-[#101520] rounded-xl border border-slate-800 space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-slate-200">Zero-Martingale Policy</span>
-                <span className="text-purple-400 font-bold bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20 text-[10px]">
+                <span className="text-cyan-400 font-bold bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20 text-[10px]">
                   100% Enforced
                 </span>
               </div>
@@ -651,7 +683,7 @@ export const AutomatedTradingHubView: React.FC = () => {
                 </p>
               </div>
             </div>
-            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+            <span className="text-[11px] font-mono font-bold text-cyan-300 shrink-0">
               GROWTH ARMED
             </span>
           </div>
@@ -700,7 +732,7 @@ export const AutomatedTradingHubView: React.FC = () => {
             <div className="p-3.5 bg-[#101520] rounded-xl border border-slate-800 space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-slate-200">High-Volatility Asset Focus</span>
-                <span className="text-purple-400 font-bold bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20 text-[10px]">
+                <span className="text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 text-[10px]">
                   XAUUSD • US30 • BTC
                 </span>
               </div>
@@ -778,7 +810,7 @@ export const AutomatedTradingHubView: React.FC = () => {
               <div className="flex items-center justify-between mb-2">
                 <span className="font-bold text-slate-100">{cred.brokerName}</span>
                 <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
                   <span>{cred.pingMs} ms</span>
                 </span>
               </div>
@@ -897,29 +929,110 @@ export const AutomatedTradingHubView: React.FC = () => {
         </div>
       </div>
 
+      {/* Live Autonomous Quantitative Market Matrix (Real 5M Candles) */}
+      <div className="glass-ultra rounded-2xl p-5 sm:p-6 border border-white/[0.1] space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/[0.08]">
+          <div>
+            <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <Sparkles className={`w-4 h-4 ${accent.textClass}`} />
+              <span>Live 5M Candle Autonomous Matrix (EMA 9/21 · RSI-14 · ATR-14)</span>
+            </h4>
+            <p className="text-[11px] text-slate-400 font-sans mt-0.5">
+              Continuously evaluates live market structure across core liquidity pairs and executes positive-expectancy trades autonomously.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={isAutonomousScanning}
+            onClick={() => void runAutonomousCycle(true)}
+            className="px-3.5 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-xs font-bold flex items-center gap-1.5 transition whitespace-nowrap"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isAutonomousScanning ? 'animate-spin' : ''}`} />
+            <span>{isAutonomousScanning ? 'Scanning Live Candles...' : 'Scan & Auto-Execute Now'}</span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {snapshotList.map((s) => (
+            <div key={s.symbol} className="glass-card rounded-xl p-3.5 border border-white/[0.08] space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-white text-sm">{s.symbol}</span>
+                  <span className="text-[10px] font-mono text-slate-400">R:R 1:{s.riskReward}</span>
+                </div>
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                    s.action === 'BUY'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : s.action === 'SELL'
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                      : 'bg-slate-800 text-slate-400 border border-white/10'
+                  }`}
+                >
+                  {s.action} · {s.confidence}%
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-[10px] font-mono tabular-nums bg-black/20 p-2 rounded-lg">
+                <div>
+                  <span className="text-slate-500 block">EMA 9/21</span>
+                  <span className="text-slate-200">{s.emaFast > s.emaSlow ? 'BULL' : 'BEAR'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">RSI-14</span>
+                  <span className="text-cyan-300">{s.rsi14}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">ATR-14</span>
+                  <span className="text-amber-300">{s.atr}</span>
+                </div>
+              </div>
+
+              <div className="text-[11px] text-slate-400 font-sans truncate">{s.reason}</div>
+
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <span className="text-[10px] text-slate-500 font-mono">
+                  SL {s.sl} · TP {s.tp}
+                </span>
+                <button
+                  type="button"
+                  disabled={isTriggeringAutoTrade}
+                  onClick={() => handleTriggerProtectedTrade(s.symbol, s.action === 'SELL' ? 'SELL' : 'BUY')}
+                  className="px-2.5 py-1 rounded-lg bg-white/[0.08] hover:bg-cyan-500/25 text-slate-200 hover:text-cyan-300 text-[10px] font-bold transition whitespace-nowrap"
+                >
+                  Execute {s.action === 'SELL' ? 'SELL' : 'BUY'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Live AI Execution & Decision Stream */}
-      <div className="bg-[#0b0e14] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+      <div className="glass-card border border-white/[0.1] rounded-2xl p-6 shadow-xl space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-            <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
-            <span>Live Decision &amp; Protection Audit Log</span>
+            <Activity className="w-4 h-4 text-emerald-400" />
+            <span>Live Autonomous Decision &amp; Protection Audit Log</span>
           </h4>
-          <span className="text-[11px] text-slate-400">Sub-millisecond packet telemetry</span>
+          <span className="text-[11px] text-slate-400">Real-time MT5 profit-guard telemetry</span>
         </div>
 
         <div className="space-y-2">
-          {liveBotLogs.map((log, idx) => (
+          {liveDecisionFeed.map((log) => (
             <div
-              key={idx}
-              className="p-3 bg-[#111622] border border-slate-800/80 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-2"
+              key={log.id}
+              className="p-3 bg-white/[0.03] border border-white/[0.08] rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-2"
             >
               <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-slate-500 text-[11px]">{log.time}</span>
+                <span className="text-slate-500 text-[11px]">{log.timestamp}</span>
                 <span className="font-bold text-slate-100">{log.bot}</span>
                 <span
                   className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                    log.action === 'BUY'
+                    log.action === 'BUY' || log.action === 'PARTIAL_LOCK'
                       ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      : log.action === 'BREAK_EVEN'
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
                       : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
                   }`}
                 >
@@ -931,7 +1044,7 @@ export const AutomatedTradingHubView: React.FC = () => {
               <div className="flex items-center gap-4 flex-wrap text-[11px]">
                 <span className="text-emerald-400 font-semibold">{log.protection}</span>
                 <span className="text-slate-400 hidden lg:inline">{log.reason}</span>
-                <span className="text-cyan-400 font-bold">{log.latency}</span>
+                <span className="text-cyan-400 font-bold">{log.latencyMs.toFixed(1)}ms</span>
               </div>
             </div>
           ))}

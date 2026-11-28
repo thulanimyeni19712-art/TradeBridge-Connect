@@ -39,8 +39,8 @@ export const AviatorVIPView: React.FC = () => {
       name: 'FREE TIER',
       price: 'R0',
       period: 'forever',
-      color: 'border border-slate-800 bg-[#0a0d16]',
-      buttonClass: 'bg-slate-800 text-slate-300 hover:bg-slate-700',
+      color: 'border border-white/[0.08] bg-[#0F141E]',
+      buttonClass: 'bg-[#141B29] text-slate-200 hover:bg-slate-800 border border-white/[0.08]',
       features: [
         'Basic pattern recognition',
         'Manual signal radar',
@@ -55,8 +55,8 @@ export const AviatorVIPView: React.FC = () => {
       price: 'R299',
       period: '/month',
       isPopular: true,
-      color: 'signal-glass border border-amber-500/50 shadow-[0_0_35px_rgba(232,185,35,0.25)] ring-1 ring-amber-500/40',
-      buttonClass: 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black shadow-lg shadow-amber-950/40',
+      color: 'border border-amber-500/45 bg-[#111827]',
+      buttonClass: 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold',
       features: [
         'Everything in Free',
         'Telegram VIP Auto-Alerts (<100ms)',
@@ -72,8 +72,8 @@ export const AviatorVIPView: React.FC = () => {
       name: 'ELITE LIFETIME',
       price: 'R1,499',
       period: 'one-time',
-      color: 'border border-cyan-500/40 bg-gradient-to-b from-[#0b1626] to-[#070b12] shadow-xl',
-      buttonClass: 'bg-gradient-to-r from-cyan-600 to-teal-600 text-white font-bold',
+      color: 'border border-cyan-500/35 bg-[#0F141E]',
+      buttonClass: 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold',
       features: [
         'Lifetime Unlimited VIP Access',
         'All Pro Features Included',
@@ -101,7 +101,7 @@ export const AviatorVIPView: React.FC = () => {
   };
 
   const handleCopyValue = (val: string, target: 'KEY' | 'WEBHOOK') => {
-    navigator.clipboard.writeText(val);
+    void navigator.clipboard?.writeText(val).catch(() => undefined);
     setCopiedTarget(target);
     const t = window.setTimeout(() => setCopiedTarget(null), 2000);
     timersRef.current.push(t);
@@ -136,22 +136,24 @@ export const AviatorVIPView: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 font-mono">
       {/* Header */}
-      <div className="text-center space-y-2 py-4">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-orbitron font-bold">
-          <Crown className="w-3.5 h-3.5" />
-          <span>VIP CLUB ACCESS</span>
+      <div className="space-y-1.5 py-2 border-b border-white/[0.08] pb-4">
+        <div className="flex items-center gap-2 text-xs text-slate-400 font-sans">
+          <Crown className="w-3.5 h-3.5 text-amber-400" />
+          <span className="font-semibold text-amber-400">VIP Club Access</span>
+          <span aria-hidden="true">·</span>
+          <span>Institutional Telemetry &amp; Relay Privileges</span>
         </div>
-        <h2 className="text-2xl sm:text-3xl font-black font-orbitron text-white uppercase tracking-wider">
-          UNLEASH THE FULL STATISTICAL ADVANTAGE
+        <h2 className="text-xl sm:text-2xl font-bold font-display text-white tracking-tight">
+          Statistical Signal &amp; Webhook Access Tiers
         </h2>
-        <p className="text-xs text-slate-400 max-w-xl mx-auto">
-          Unlock sub-millisecond Telegram alerts, AI pattern recognition, and autonomous EA crash bot execution
+        <p className="text-xs text-slate-400 max-w-2xl font-sans">
+          Unlock sub-millisecond Telegram alerts, AI pattern recognition, and autonomous EA crash bot execution.
         </p>
       </div>
 
       {/* Activation Banner */}
       {activationNotice && (
-        <div className="p-3.5 rounded-2xl bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between gap-3">
+        <div className="p-3.5 rounded-xl bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{activationNotice}</span>
@@ -166,36 +168,37 @@ export const AviatorVIPView: React.FC = () => {
       )}
 
       {/* Tiers Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {tiers.map((t) => (
           <div
             key={t.id}
-            className={`rounded-3xl p-6 flex flex-col justify-between relative transition-transform hover:-translate-y-1 ${t.color}`}
+            className={`rounded-2xl p-6 flex flex-col justify-between relative transition-colors ${t.color}`}
           >
-            {t.isPopular && (
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 px-3 py-0.5 rounded-full text-[10px] font-orbitron font-black uppercase tracking-widest shadow-md">
-                MOST POPULAR IN SA
-              </div>
-            )}
-
             <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-                <span className="font-orbitron font-black text-sm text-white tracking-widest">
-                  {t.name}
-                </span>
+              <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
+                <div>
+                  <span className="font-sans font-bold text-sm text-white tracking-tight block">
+                    {t.name}
+                  </span>
+                  {t.isPopular && (
+                    <span className="text-[11px] font-sans text-amber-400 font-medium">
+                      Recommended · Most Popular in SA
+                    </span>
+                  )}
+                </div>
                 {t.isPopular && <Sparkles className="w-4 h-4 text-amber-400" />}
               </div>
 
               <div className="flex items-baseline gap-1 tabular-nums">
-                <span className="text-3xl sm:text-4xl font-black font-orbitron text-white">
+                <span className="text-3xl sm:text-4xl font-bold font-display text-white">
                   {t.price}
                 </span>
-                <span className="text-xs text-slate-400">{t.period}</span>
+                <span className="text-xs text-slate-400 font-sans">{t.period}</span>
               </div>
 
               <ul className="space-y-2.5 pt-2">
                 {t.features.map((feat, i) => (
-                  <li key={i} className="flex items-start gap-2 text-xs text-slate-300">
+                  <li key={i} className="flex items-start gap-2 text-xs text-slate-300 font-sans">
                     <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
                     <span>{feat}</span>
                   </li>
@@ -205,9 +208,9 @@ export const AviatorVIPView: React.FC = () => {
 
             <button
               onClick={() => handleSelectTier(t)}
-              className={`w-full py-3 rounded-2xl font-orbitron text-xs transition mt-6 ${t.buttonClass}`}
+              className={`w-full py-2.5 rounded-xl font-sans text-xs transition mt-6 ${t.buttonClass}`}
             >
-              {activeTier === t.id ? 'CURRENTLY ACTIVE' : `UPGRADE TO ${t.name}`}
+              {activeTier === t.id ? 'Currently Active' : `Activate ${t.name}`}
             </button>
           </div>
         ))}
@@ -215,14 +218,14 @@ export const AviatorVIPView: React.FC = () => {
 
       {/* Unlocked VIP Dispatch Webhook & API Key Drawer */}
       {(activeTier === 'PRO' || activeTier === 'ELITE') && (
-        <div className="rounded-3xl bg-[#0a0f1d] border border-cyan-500/35 p-6 space-y-4 shadow-xl">
+        <div className="rounded-2xl bg-[#0F141E] border border-white/[0.08] p-6 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
             <div className="flex items-center gap-2.5">
               <div className="p-2 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-300">
                 <Key className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm font-orbitron font-bold text-white uppercase tracking-wider">
+                <h3 className="text-sm font-sans font-bold text-white uppercase tracking-wider">
                   VIP Dispatch Webhook &amp; API Key Console
                 </h3>
                 <p className="text-[11px] text-slate-400">

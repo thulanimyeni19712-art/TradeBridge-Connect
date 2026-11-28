@@ -195,18 +195,19 @@ export const AviatorBroadcastView: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 font-mono">
       {/* Title Banner */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#0a0d14] border border-amber-500/20 rounded-2xl p-4 shadow-xl">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#0F141E] border border-white/[0.08] rounded-2xl p-4 sm:p-5">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-              <Send className="w-4 h-4" />
-            </span>
-            <h2 className="text-base font-orbitron font-extrabold text-white tracking-wider uppercase">
-              TELEGRAM &amp; DISCORD BROADCAST HUB
-            </h2>
+          <div className="flex items-center gap-2 text-xs text-slate-400 font-sans">
+            <span className="font-semibold text-cyan-400">Signal Relay</span>
+            <span aria-hidden="true">·</span>
+            <span>Telegram Bot API &amp; Discord Webhook</span>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Dispatch real-time signal payloads directly to your Telegram Bot API channel or Discord Webhook endpoint
+          <h2 className="text-base sm:text-lg font-sans font-bold text-white tracking-tight mt-0.5 flex items-center gap-2">
+            <Send className="w-4 h-4 text-cyan-400" />
+            <span>Telegram &amp; Discord Broadcast Hub</span>
+          </h2>
+          <p className="text-xs text-slate-400 mt-1 font-sans">
+            Dispatch real-time signal payloads directly to your Telegram channel or Discord webhook
           </p>
         </div>
 
@@ -215,23 +216,23 @@ export const AviatorBroadcastView: React.FC = () => {
             type="button"
             onClick={() => setIsAutoBroadcast(!isAutoBroadcast)}
             aria-pressed={isAutoBroadcast}
-            className={`px-3 py-2 rounded-xl border font-orbitron font-bold text-xs transition flex items-center gap-1.5 ${
+            className={`px-3 py-2 rounded-xl border font-sans font-semibold text-xs transition flex items-center gap-1.5 ${
               isAutoBroadcast
                 ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
-                : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                : 'bg-[#090C12] border-white/[0.08] text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Radio className={`w-3.5 h-3.5 ${isAutoBroadcast ? 'animate-pulse text-emerald-400' : ''}`} />
-            <span>AUTO-DISPATCH: {isAutoBroadcast ? 'ON' : 'OFF'}</span>
+            <Radio className={`w-3.5 h-3.5 ${isAutoBroadcast ? 'text-emerald-400' : ''}`} />
+            <span>Auto-Dispatch: {isAutoBroadcast ? 'ON' : 'OFF'}</span>
           </button>
 
           <button
             type="button"
             disabled={isDispatching}
             onClick={handleTestBroadcast}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 font-orbitron font-bold text-xs text-white shadow-lg transition transform active:scale-95 disabled:opacity-50"
+            className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 font-sans font-semibold text-xs text-slate-950 transition disabled:opacity-50"
           >
-            {isDispatching ? 'DISPATCHING...' : 'DISPATCH LIVE SIGNAL'}
+            {isDispatching ? 'Dispatching...' : 'Dispatch Live Signal'}
           </button>
         </div>
       </div>
@@ -261,12 +262,12 @@ export const AviatorBroadcastView: React.FC = () => {
             {/* Telegram Configuration */}
             <div className="glass-ultra p-5 space-y-4 border border-cyan-500/30 shadow-xl rounded-2xl">
               <div className="flex items-center justify-between border-b border-cyan-500/20 pb-3">
-                <h3 className="font-orbitron font-bold text-sm text-white flex items-center gap-2">
+                <h3 className="font-sans font-bold text-sm text-white flex items-center gap-2">
                   <Send className="w-4 h-4 text-cyan-400" />
                   <span>TELEGRAM BOT API</span>
                 </h3>
                 <span
-                  className={`px-2 py-0.5 rounded text-[10px] font-orbitron border ${
+                  className={`px-2 py-0.5 rounded text-[10px] font-sans font-semibold border ${
                     tgConfigured
                       ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                       : 'bg-slate-800 text-slate-400 border-slate-700'
@@ -304,12 +305,12 @@ export const AviatorBroadcastView: React.FC = () => {
             {/* Discord Webhook Configuration */}
             <div className="glass-ultra p-5 space-y-4 border border-[#5865F2]/30 shadow-xl rounded-2xl">
               <div className="flex items-center justify-between border-b border-[#5865F2]/20 pb-3">
-                <h3 className="font-orbitron font-bold text-sm text-white flex items-center gap-2">
+                <h3 className="font-sans font-bold text-sm text-white flex items-center gap-2">
                   <MessageSquare className="w-4 h-4 text-[#5865F2]" />
                   <span>DISCORD WEBHOOK</span>
                 </h3>
                 <span
-                  className={`px-2 py-0.5 rounded text-[10px] font-orbitron border ${
+                  className={`px-2 py-0.5 rounded text-[10px] font-sans font-semibold border ${
                     dcConfigured
                       ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                       : 'bg-slate-800 text-slate-400 border-slate-700'
@@ -327,7 +328,7 @@ export const AviatorBroadcastView: React.FC = () => {
                     value={discordWebhookUrl}
                     onChange={(e) => setDiscordWebhookUrl(e.target.value)}
                     placeholder="https://discord.com/api/webhooks/..."
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-purple-500 font-mono"
+                    className="w-full bg-slate-900 border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono"
                   />
                 </div>
 
@@ -340,8 +341,8 @@ export const AviatorBroadcastView: React.FC = () => {
                         onClick={() => setSelectedFilter(f.id as typeof selectedFilter)}
                         className={`p-1.5 rounded-lg border text-left transition ${
                           selectedFilter === f.id
-                            ? 'bg-purple-500/20 border-purple-500/50 text-white font-bold'
-                            : 'bg-slate-900/60 border-slate-800 text-slate-400'
+                            ? 'bg-cyan-500/20 border-cyan-500/50 text-white font-bold'
+                            : 'bg-slate-900/60 border-white/[0.08] text-slate-400'
                         }`}
                       >
                         <span className="text-[10px] block truncate">{f.label}</span>
@@ -354,11 +355,11 @@ export const AviatorBroadcastView: React.FC = () => {
           </div>
 
           {/* Searchable Broadcast History Table */}
-          <div className="bg-[#080d16] border border-slate-800 rounded-2xl p-5 shadow-2xl space-y-4">
+          <div className="bg-[#0F141E] border border-white/[0.08] rounded-2xl p-5 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
               <div>
-                <h3 className="text-sm font-bold text-white font-orbitron uppercase tracking-wider flex items-center gap-2">
-                  <Radio className="w-4 h-4 text-cyan-400 animate-pulse" />
+                <h3 className="text-sm font-bold text-white font-sans uppercase tracking-wider flex items-center gap-2">
+                  <Radio className="w-4 h-4 text-cyan-400" />
                   <span>Signal Dispatch Audit Log ({historyList.length})</span>
                 </h3>
                 <p className="text-[11px] text-slate-400">
@@ -405,7 +406,7 @@ export const AviatorBroadcastView: React.FC = () => {
             <div className="overflow-x-auto custom-scrollbar">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-slate-800 text-[10px] text-slate-400 uppercase font-orbitron">
+                  <tr className="border-b border-slate-800 text-[10px] text-slate-400 uppercase font-sans font-semibold">
                     <th className="py-2.5 px-3">Bookmaker / Asset</th>
                     <th className="py-2.5 px-3">Type</th>
                     <th className="py-2.5 px-3">Destination</th>
@@ -419,7 +420,7 @@ export const AviatorBroadcastView: React.FC = () => {
                   {filteredHistory.length > 0 ? (
                     filteredHistory.map((item) => (
                       <tr key={item.id} className="hover:bg-slate-900/40 transition">
-                        <td className="py-2.5 px-3 font-bold text-white font-orbitron">
+                        <td className="py-2.5 px-3 font-bold text-white font-sans">
                           {item.symbol}
                         </td>
                         <td className="py-2.5 px-3">
@@ -433,7 +434,7 @@ export const AviatorBroadcastView: React.FC = () => {
                               item.channel === 'TELEGRAM'
                                 ? 'bg-cyan-500/15 text-cyan-300'
                                 : item.channel === 'DISCORD'
-                                ? 'bg-purple-500/15 text-purple-300'
+                                ? 'bg-amber-500/15 text-amber-300'
                                 : 'bg-emerald-500/15 text-emerald-300'
                             }`}
                           >
@@ -493,15 +494,15 @@ export const AviatorBroadcastView: React.FC = () => {
 
         {/* Right 1 Col: Live Trending Signal Radar derived from AviatorContext */}
         <div className="space-y-4">
-          <div className="bg-[#090d16] border border-amber-500/30 rounded-2xl p-5 shadow-2xl space-y-4">
+          <div className="bg-[#0F141E] border border-white/[0.08] rounded-2xl p-5 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-amber-400" />
-                <h3 className="text-xs font-bold text-white uppercase tracking-wider font-orbitron">
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider font-sans">
                   Trending Signals Radar
                 </h3>
               </div>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold font-orbitron animate-pulse">
+              <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold font-sans">
                 LIVE
               </span>
             </div>
@@ -527,7 +528,7 @@ export const AviatorBroadcastView: React.FC = () => {
                     <div className="flex items-start justify-between">
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <span className="font-extrabold text-white text-xs font-orbitron">
+                          <span className="font-extrabold text-white text-xs font-sans">
                             {stat.symbol}
                           </span>
                           <span

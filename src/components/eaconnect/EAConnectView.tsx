@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useTrading } from '../../context/TradingContext';
+import { useBrand } from '../../context/BrandContext';
 import {
   Server,
   Radio,
@@ -18,9 +19,11 @@ import {
   HardDrive,
   Globe,
   Download,
+  BarChart3,
 } from 'lucide-react';
 
 export const EAConnectView: React.FC = () => {
+  const { brand } = useBrand();
   const { terminals, toggleTerminalAutoTrading, updateTerminalMultiplier, bridgeLatencyMs } = useTrading();
   const [selectedTerminalId, setSelectedTerminalId] = useState<string>(terminals[0]?.id || '');
   const selectedTerminal = useMemo(
@@ -88,15 +91,14 @@ Verification Status: Pending live MetaEditor compilation on Demo terminals.`;
   return (
     <div className="space-y-6">
       {/* Top Banner */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[#0c1322] via-[#09101c] to-[#141026] border border-cyan-800/40 p-6 md:p-8 shadow-2xl">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative z-10 max-w-3xl space-y-3">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-mono font-medium">
+      <div className="relative rounded-2xl overflow-hidden bg-[#0F141E] border border-white/[0.08] p-6 md:p-8 shadow-xl">
+        <div className="relative z-10 max-w-3xl space-y-2.5">
+          <div className="flex items-center gap-2 text-cyan-300 text-xs font-mono font-medium">
             <Server className="w-3.5 h-3.5 text-cyan-400" />
-            <span>EA-Connect.com • Cloud Terminal Synchronizer & VPS Manager</span>
+            <span>{brand.brandName} · Cloud Terminal Synchronizer &amp; VPS Manager</span>
           </div>
-          <h2 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
-            Multi-Terminal MetaTrader & cTrader Cloud Control
+          <h2 className="text-2xl md:text-3xl font-bold text-white font-display tracking-tight">
+            Multi-Terminal MetaTrader &amp; cTrader Cloud Control
           </h2>
           <p className="text-sm text-slate-300 leading-relaxed">
             Monitor, sync, and remotely control all your broker accounts without local VPS setup or keeping your desktop running. Real-time heartbeat telemetry, 1-to-many cloud trade copier, and instant kill switches.
@@ -118,7 +120,7 @@ Verification Status: Pending live MetaEditor compilation on Demo terminals.`;
       </div>
 
       {/* SafeBridge Production Phase 2: Micro-Capital Risk Engine & Deployment Deck */}
-      <div className="obsidian-panel hud-bracket rounded-2xl p-5 md:p-6 border border-amber-500/30 shadow-2xl space-y-5 font-mono text-xs">
+      <div className="obsidian-panel rounded-2xl p-5 md:p-6 border border-amber-500/30 shadow-2xl space-y-5 font-mono text-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-white/[0.08] pb-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -126,8 +128,8 @@ Verification Status: Pending live MetaEditor compilation on Demo terminals.`;
               <h3 className="font-bold text-base text-slate-100 tracking-tight">
                 SafeBridge Production Phase 2 • Micro-Capital Risk Engine
               </h3>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                ACTIVE CONFIG: 0.30 CAPITAL
+              <span className="text-[11px] font-bold text-amber-300 font-mono">
+                · ACTIVE CONFIG: 0.30 CAPITAL
               </span>
             </div>
             <p className="text-slate-400 text-xs font-sans">
@@ -174,10 +176,10 @@ Verification Status: Pending live MetaEditor compilation on Demo terminals.`;
 
           <div className="p-3 bg-black/40 rounded-xl border border-white/[0.08] space-y-1">
             <span className="text-[10px] text-slate-400 uppercase">Peak Drawdown Halt</span>
-            <div className="text-lg font-black text-purple-400">
+            <div className="text-lg font-black text-amber-400">
               5.0% <span className="text-xs font-semibold text-slate-400">(0.0150)</span>
             </div>
-            <span className="text-[10px] text-purple-300/80 block">Trailing High-Water Mark</span>
+            <span className="text-[10px] text-amber-300/80 block">Trailing High-Water Mark</span>
           </div>
         </div>
 
@@ -261,7 +263,7 @@ Verification Status: Pending live MetaEditor compilation on Demo terminals.`;
         {/* Verification Status & Weekly Review Prompt */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-white/[0.08]">
           <div className="flex items-center gap-2 text-slate-400">
-            <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <div className="w-2 h-2 rounded-full bg-amber-400" />
             <span>Status: Python modules passed syntax checks • MQL5 MetaEditor demo test pending</span>
           </div>
 
@@ -269,7 +271,8 @@ Verification Status: Pending live MetaEditor compilation on Demo terminals.`;
             onClick={() => setIsDemoReviewOpen(!isDemoReviewOpen)}
             className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-cyan-500/30 rounded-lg text-xs font-bold transition flex items-center gap-1.5"
           >
-            <span>📊 Review SafeBridge Demo Results Weekly</span>
+            <BarChart3 className="w-3.5 h-3.5" />
+            <span>Review SafeBridge Demo Results Weekly</span>
           </button>
         </div>
 
@@ -420,7 +423,7 @@ Verification Status: Pending live MetaEditor compilation on Demo terminals.`;
                   {term.platform}
                 </span>
                 <span className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
                   <span>{term.pingMs} ms</span>
                 </span>
               </div>
@@ -481,7 +484,7 @@ Verification Status: Pending live MetaEditor compilation on Demo terminals.`;
             </p>
           </div>
 
-          <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shrink-0 tabular-nums">
+          <span className="text-xs font-mono font-bold text-cyan-300 shrink-0 tabular-nums">
             Copier Bus RTT: {bridgeLatencyMs.toFixed(1)}ms
           </span>
         </div>

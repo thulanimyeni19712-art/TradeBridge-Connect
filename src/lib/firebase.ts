@@ -1,16 +1,64 @@
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
+import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
+import { getAuth, GoogleAuthProvider, onAuthStateChanged, User } from 'firebase/auth';
+import { doc, getDocFromServer, getFirestore, initializeFirestore, type Firestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
+const app: FirebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
 
 export const auth = getAuth(app);
 const rawConfig = firebaseConfig as unknown as { firestoreDatabaseId?: string };
-export const dbFirestore = rawConfig.firestoreDatabaseId
-  ? getFirestore(app, rawConfig.firestoreDatabaseId)
-  : getFirestore(app);
+
+function createFirestoreClient(): Firestore {
+  try {
+    return rawConfig.firestoreDatabaseId
+      ? initializeFirestore(app, { experimentalAutoDetectLongPolling: true }, rawConfig.firestoreDatabaseId)
+      : initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+  } catch {
+    return rawConfig.firestoreDatabaseId
+      ? getFirestore(app, rawConfig.firestoreDatabaseId)
+      : getFirestore(app);
+  }
+}
+
+export const dbFirestore: Firestore = createFirestoreClient();
 export const googleAuthProvider = new GoogleAuthProvider();
+
+// Workspace OAuth Scopes (Calendar, Docs, Slides, Forms, Meet, Contacts/People, Drive, Sheets, Gmail, Classroom)
+export const WORKSPACE_SCOPES = [
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/drive.metadata.readonly',
+  'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/spreadsheets.readonly',
+  'https://www.googleapis.com/auth/spreadsheets',
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/classroom.courses.readonly',
+  'https://www.googleapis.com/auth/calendar',
+  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/documents',
+  'https://www.googleapis.com/auth/documents.readonly',
+  'https://www.googleapis.com/auth/presentations',
+  'https://www.googleapis.com/auth/presentations.readonly',
+  'https://www.googleapis.com/auth/forms.body',
+  'https://www.googleapis.com/auth/forms.body.readonly',
+  'https://www.googleapis.com/auth/forms.responses.readonly',
+  'https://www.googleapis.com/auth/meetings.space.created',
+  'https://www.googleapis.com/auth/meetings.space.readonly',
+  'https://www.googleapis.com/auth/meetings.space.settings',
+  'https://www.googleapis.com/auth/contacts',
+  'https://www.googleapis.com/auth/contacts.readonly',
+  'https://www.googleapis.com/auth/contacts.other.readonly',
+  'https://www.googleapis.com/auth/directory.readonly',
+  'https://www.googleapis.com/auth/user.emails.read',
+  'https://www.googleapis.com/auth/user.organization.read',
+  'https://www.googleapis.com/auth/user.phonenumbers.read',
+] as const;
+
+for (const scope of WORKSPACE_SCOPES) {
+  googleAuthProvider.addScope(scope);
+}
 
 // Error handler conforming to Firebase Integration Skill
 export enum OperationType {
@@ -84,80 +132,50 @@ export async function testConnection() {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.error('Please check your Firebase configuration: client is offline.');
     }
-    // Ignore permission errors when unauthenticated on restricted test doc
   }
 }
 
 void testConnection();
 
-// Add Workspace scopes to Google Auth Provider including Google Picker, Sheets write, and Gmail send scopes
-googleAuthProvider.addScope('https://www.googleapis.com/auth/drive.file');
-googleAuthProvider.addScope('https://www.googleapis.com/auth/drive.metadata.readonly');
-googleAuthProvider.addScope('https://www.googleapis.com/auth/drive.readonly');
-googleAuthProvider.addScope('https://www.googleapis.com/auth/spreadsheets.readonly');
-googleAuthProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
-googleAuthProvider.addScope('https://www.googleapis.com/auth/gmail.readonly');
-googleAuthProvider.addScope('https://www.googleapis.com/auth/gmail.send');
-googleAuthProvider.addScope('https://www.googleapis.com/auth/classroom.courses.readonly');
+// Strict in-memory OAuth access token cache (never persisted to web storage)
+let isSigningIn = false;
+let cachedAccessToken: string | null = null;
 
-const OAUTH_TOKEN_STORAGE_KEY = 'titan_workspace_oauth_token';
-let cachedAccessToken: string | null = (() => {
-  try {
-    return typeof window !== 'undefined' ? sessionStorage.getItem(OAUTH_TOKEN_STORAGE_KEY) : null;
-  } catch {
-    return null;
+onAuthStateChanged(auth, (user: User | null) => {
+  if (!user && !isSigningIn) {
+    cachedAccessToken = null;
   }
-})();
+});
 
 export const getAccessToken = async (): Promise<string | null> => {
-  if (cachedAccessToken) return cachedAccessToken;
-  try {
-    if (typeof window !== 'undefined') {
-      const stored = sessionStorage.getItem(OAUTH_TOKEN_STORAGE_KEY);
-      if (stored) {
-        cachedAccessToken = stored;
-        return stored;
-      }
-    }
-  } catch {
-    // Ignore sessionStorage restrictions
-  }
-  return null;
+  return cachedAccessToken;
 };
 
 export const setCachedAccessToken = (token: string | null) => {
   cachedAccessToken = token;
-  try {
-    if (typeof window !== 'undefined') {
-      if (token) {
-        sessionStorage.setItem(OAUTH_TOKEN_STORAGE_KEY, token);
-      } else {
-        sessionStorage.removeItem(OAUTH_TOKEN_STORAGE_KEY);
-      }
-    }
-  } catch {
-    // Ignore sessionStorage restrictions
-  }
 };
 
 export const signInWithGoogleWorkspace = async () => {
+  isSigningIn = true;
   try {
     const { signInWithPopup } = await import('firebase/auth');
     const result = await signInWithPopup(auth, googleAuthProvider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (credential?.accessToken) {
-      setCachedAccessToken(credential.accessToken);
+      cachedAccessToken = credential.accessToken;
     }
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error) {
     console.error('Google Workspace sign in error:', error);
     throw error;
+  } finally {
+    isSigningIn = false;
   }
 };
 
 export const logoutWorkspace = async () => {
   await auth.signOut();
-  setCachedAccessToken(null);
+  cachedAccessToken = null;
 };
 
 export interface RealDriveFile {

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { useBrand } from '../../context/BrandContext';
 import {
   Code,
   Download,
@@ -547,7 +548,7 @@ void ApplyBreakEvenToProfits(double bePips) {
     description:
       'High-frequency Gold (XAUUSD) and US30 MQL5 EA integrating institutional Fair Value Gap (FVG) displacement scans and session volume filters with zero-martingale risk capping.',
     version: 'v4.8.5',
-    author: 'EasyWay2Trade / Titan Quant',
+    author: 'APEX SOVEREIGN · Myeni Quant',
     compatibility: 'MetaTrader 5 (XAUUSD, US30 M1/M5)',
     latencyTarget: '< 2.0 ms tick',
     auditChecks: [
@@ -556,10 +557,10 @@ void ApplyBreakEvenToProfits(double bePips) {
       'Spread & slippage guard rejects thin liquidity spikes',
     ],
     codeTemplate: `//+------------------------------------------------------------------+
-//|                                    EasyWay_Endgame_HFT_Pro.mq5   |
-//|                            Official EasyWay2Trade Flagship Bot   |
+//|                                   Sovereign_Endgame_HFT_Pro.mq5  |
+//|                       Myeni Quantitative Capital Flagship Bot    |
 //+------------------------------------------------------------------+
-#property copyright "EasyWay2Trade Algorithms"
+#property copyright "APEX SOVEREIGN · Myeni Quantitative Capital"
 #property version   "4.85"
 #property strict
 
@@ -625,7 +626,7 @@ void ExecuteOrder(ENUM_ORDER_TYPE orderType) {
     description:
       'MetaTrader 4 trend & order-block harvester tracking institutional breaker structure shifts and automatic account-balance lot calculation.',
     version: 'v2.4.2',
-    author: 'EasyWay2Trade Matrix',
+    author: 'APEX SOVEREIGN · Myeni Quant',
     compatibility: 'MetaTrader 4 (EURUSD, GBPJPY, NAS100 M15)',
     latencyTarget: '< 3.5 ms tick',
     auditChecks: [
@@ -634,9 +635,9 @@ void ExecuteOrder(ENUM_ORDER_TYPE orderType) {
     ],
     codeTemplate: `//+------------------------------------------------------------------+
 //|                                   Shadow_River_TrendMatrix.mq4   |
-//|                           EasyWay2Trade Institutional Trend EA   |
+//|                   Myeni Quantitative Capital Institutional Trend |
 //+------------------------------------------------------------------+
-#property copyright "EasyWay2Trade"
+#property copyright "APEX SOVEREIGN · Myeni Quantitative Capital"
 #property strict
 
 extern double RiskPercent    = {{RISK_PCT}};
@@ -791,7 +792,7 @@ if __name__ == "__main__":
     description:
       'Calibrated parameter configuration (.set) file synchronized to your active Risk % and Max Daily Drawdown Guard settings for Prop Firm evaluations.',
     version: 'v4.2',
-    author: 'EasyWay2Trade / Emerge Verified',
+    author: 'APEX SOVEREIGN · Prop Desk Verified',
     compatibility: 'MT5 Inputs Tab (Endgame / Titan Bridge)',
     latencyTarget: 'Instant load',
     auditChecks: [
@@ -822,7 +823,7 @@ TakeProfit2_Pips=75.0`,
 ];
 
 const LANGUAGE_BADGE_MAP: Record<ScriptLanguage, string> = {
-  CPP_FIX: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
+  CPP_FIX: 'bg-sky-500/20 text-sky-300 border-sky-500/40',
   PYTHON: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
   MQL5: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
   MQL4: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
@@ -831,6 +832,7 @@ const LANGUAGE_BADGE_MAP: Record<ScriptLanguage, string> = {
 };
 
 export const HighLevelScriptsVaultView: React.FC = () => {
+  const { brand } = useBrand();
   const defaultOrigin =
     typeof window !== 'undefined' ? `${window.location.origin}/api/mt5/bridge` : 'https://localhost:3000/api/mt5/bridge';
 
@@ -921,7 +923,7 @@ export const HighLevelScriptsVaultView: React.FC = () => {
   const codeLines = useMemo(() => compiledCode.split('\n'), [compiledCode]);
 
   const handleCopyCode = (script: ScriptItem) => {
-    navigator.clipboard.writeText(renderInjectedCode(script.codeTemplate));
+    void navigator.clipboard?.writeText(renderInjectedCode(script.codeTemplate)).catch(() => undefined);
     setCopiedScriptId(script.id);
     setTimeout(() => setCopiedScriptId(null), 2200);
     triggerToast(`Copied parameterized source for ${script.filename}`);
@@ -955,7 +957,7 @@ export const HighLevelScriptsVaultView: React.FC = () => {
       null,
       2
     );
-    navigator.clipboard.writeText(samplePayload);
+    void navigator.clipboard?.writeText(samplePayload).catch(() => undefined);
     setCopiedPayload(true);
     setTimeout(() => setCopiedPayload(false), 2200);
     triggerToast('Copied live Webhook JSON test specification');
@@ -1025,19 +1027,18 @@ export const HighLevelScriptsVaultView: React.FC = () => {
       )}
 
       {/* Institutional Forge Header */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[#0a1628] via-[#08101c] to-[#160e29] border border-cyan-500/35 p-5 md:p-7 shadow-2xl">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative rounded-2xl overflow-hidden bg-[#0F141E] border border-white/[0.08] p-5 md:p-7 shadow-xl">
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-          <div className="max-w-3xl space-y-2.5">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-bold">
+          <div className="max-w-3xl space-y-2">
+            <div className="flex items-center gap-2 text-cyan-300 text-xs font-semibold">
               <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-              <span>INSTITUTIONAL QUANTITATIVE SCRIPTS &amp; EXECUTION FORGE</span>
+              <span>{brand.brandName} · Institutional Quantitative Scripts &amp; Execution Forge</span>
             </div>
-            <h2 className="text-xl md:text-3xl font-extrabold text-white tracking-tight font-orbitron">
+            <h2 className="text-xl md:text-3xl font-bold text-white tracking-tight font-display">
               FIX 4.4 C++, Kalman StatArb, TWAP/VWAP, MQL5 &amp; Bridge Vault
             </h2>
             <p className="text-xs md:text-sm text-slate-300 leading-relaxed font-sans">
-              Inspect, parameterize, and export production-hardened execution engines—from ultra-low-latency C++20 FIX 4.4 routers and Ornstein-Uhlenbeck StatArb models to live MQL5 Order-Flow EAs synced to your active bridge endpoint.
+              Proprietary execution codebase owned by {brand.ownerEntity}—inspect, parameterize, and export production-hardened C++20 FIX 4.4 routers, Ornstein-Uhlenbeck StatArb models, and MQL5 Order-Flow EAs synced to your active bridge endpoint.
             </p>
 
             <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] tabular-nums">
@@ -1049,7 +1050,7 @@ export const HighLevelScriptsVaultView: React.FC = () => {
                 <Zap className="w-3.5 h-3.5" />
                 <span>Live Parameter Injection Active</span>
               </span>
-              <span className="flex items-center gap-1.5 text-purple-300 bg-purple-500/10 px-2.5 py-1 rounded-lg border border-purple-500/20">
+              <span className="flex items-center gap-1.5 text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
                 <Lock className="w-3.5 h-3.5" />
                 <span>Hard DD Guard: {maxDdPct.toFixed(1)}%</span>
               </span>
@@ -1068,7 +1069,7 @@ export const HighLevelScriptsVaultView: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsNewModalOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black font-orbitron text-xs flex items-center gap-1.5 transition shadow-lg shadow-cyan-950/50"
+              className="px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition shadow-lg shadow-cyan-950/50"
             >
               <Plus className="w-4 h-4" />
               <span>Author Custom Script</span>
@@ -1080,7 +1081,7 @@ export const HighLevelScriptsVaultView: React.FC = () => {
       {/* Live Parameter Injector Bar */}
       <div className="bg-[#0b0f18] border border-slate-800 rounded-2xl p-4 space-y-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider font-orbitron">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
             <Sliders className="w-4 h-4 text-cyan-400" />
             <span>Live Code Parameter Injector</span>
           </div>
@@ -1297,7 +1298,7 @@ export const HighLevelScriptsVaultView: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h4 className="text-sm font-bold text-slate-100 font-orbitron">{selectedScript.name}</h4>
+                  <h4 className="text-sm font-bold text-slate-100 font-display">{selectedScript.name}</h4>
                   <span
                     className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
                       LANGUAGE_BADGE_MAP[selectedScript.language]
@@ -1422,7 +1423,7 @@ export const HighLevelScriptsVaultView: React.FC = () => {
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <Code className="w-5 h-5 text-cyan-400" />
-                <h3 className="text-sm font-black text-white font-orbitron uppercase">
+                <h3 className="text-sm font-bold text-white font-display uppercase">
                   Author Custom Quantitative Script
                 </h3>
               </div>
@@ -1512,7 +1513,7 @@ export const HighLevelScriptsVaultView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black font-orbitron"
+                  className="px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold"
                 >
                   Save Script to Vault
                 </button>

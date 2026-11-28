@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   BookmakerId,
   BookmakerInfo,
@@ -9,6 +9,7 @@ import {
   CrashPatternType,
 } from '../types/aviator';
 import { randomHex, randomUint32, sha256Hex } from '../lib/crypto';
+import { speechNotifier } from '../services/speechNotificationService';
 
 export const SA_BOOKMAKERS: BookmakerInfo[] = [
   {
@@ -27,7 +28,7 @@ export const SA_BOOKMAKERS: BookmakerInfo[] = [
     name: 'Hollywoodbets SA',
     country: 'ZA',
     currency: 'ZAR',
-    logoColor: 'text-purple-400 bg-purple-500/10 border-purple-500/30',
+    logoColor: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30',
     minBet: 1,
     maxBet: 30000,
     rtpRate: '97.0%',
@@ -252,6 +253,10 @@ export const AviatorProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const roundCounterRef = useRef<number>(9990);
   const isCrashedProcessedRef = useRef<boolean>(false);
   const cooldownTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const announcedBotRoundRef = useRef<number>(-1);
+  const announced5xRoundRef = useRef<number>(-1);
+  const announced10xRoundRef = useRef<number>(-1);
+  const consecutiveLossesRef = useRef<number>(0);
 
   // Seed history
   const [rounds, setRounds] = useState<CrashRound[]>(INITIAL_ROUNDS_SEED);
@@ -363,23 +368,24 @@ export const AviatorProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, []);
 
-  // Cashout bet action
+  // Cashout bet action (reads multiplierRef.current to prevent stale closure multipliers)
   const cashoutBet = useCallback((slotNum: 1 | 2) => {
     if (flightStatus !== 'FLYING') return;
+    const liveMult = multiplierRef.current;
     if (slotNum === 1) {
       setBetSlot1((prev) => {
         if (!prev.isPlaced || prev.isCashedOut) return prev;
-        const profit = +(prev.amount * currentMultiplier - prev.amount).toFixed(2);
-        return { ...prev, isCashedOut: true, cashoutPrice: currentMultiplier, pnl: profit };
+        const profit = +(prev.amount * liveMult - prev.amount).toFixed(2);
+        return { ...prev, isCashedOut: true, cashoutPrice: liveMult, pnl: profit };
       });
     } else {
       setBetSlot2((prev) => {
         if (!prev.isPlaced || prev.isCashedOut) return prev;
-        const profit = +(prev.amount * currentMultiplier - prev.amount).toFixed(2);
-        return { ...prev, isCashedOut: true, cashoutPrice: currentMultiplier, pnl: profit };
+        const profit = +(prev.amount * liveMult - prev.amount).toFixed(2);
+        return { ...prev, isCashedOut: true, cashoutPrice: liveMult, pnl: profit };
       });
     }
-  }, [flightStatus, currentMultiplier]);
+  }, [flightStatus]);
 
   // Cancel bet action
   const cancelBet = useCallback((slotNum: 1 | 2) => {
@@ -392,13 +398,43 @@ export const AviatorProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // EA Bot toggle
   const toggleEaBot = useCallback(() => {
-    setEaSettings((prev) => ({ ...prev, isRunning: !prev.isRunning }));
+    setEaSettings((prev) => {
+      const nextRunning = !prev.isRunning;
+      speechNotifier.speak({
+        category: 'BOT_ENTRY',
+        severity: 'HIGH',
+        title: nextRunning ? 'Aviator EA Lab Bot Armed' : 'Aviator EA Lab Bot Disengaged',
+        message: nextRunning
+          ? `Aviator autonomous bot engaged using ${prev.strategy.replace(/_/g, ' ')} at ${prev.autoCashout.toFixed(2)} x target.`
+          : 'Aviator autonomous crash bot disengaged.',
+        dedupeKey: `aviator-bot-toggle-${nextRunning}`,
+        cooldownMs: 1500,
+      });
+      return { ...prev, isRunning: nextRunning };
+    });
   }, []);
 
   const roundsRef = useRef<CrashRound[]>(rounds);
+  const multiplierRef = useRef<number>(currentMultiplier);
+  const betSlot1Ref = useRef<CrashBetSlot>(betSlot1);
+  const betSlot2Ref = useRef<CrashBetSlot>(betSlot2);
+  const eaSettingsRef = useRef<EABotSettings>(eaSettings);
+
   useEffect(() => {
     roundsRef.current = rounds;
   }, [rounds]);
+  useEffect(() => {
+    multiplierRef.current = currentMultiplier;
+  }, [currentMultiplier]);
+  useEffect(() => {
+    betSlot1Ref.current = betSlot1;
+  }, [betSlot1]);
+  useEffect(() => {
+    betSlot2Ref.current = betSlot2;
+  }, [betSlot2]);
+  useEffect(() => {
+    eaSettingsRef.current = eaSettings;
+  }, [eaSettings]);
 
   // Clean up post-crash cooldown timer on unmount
   useEffect(() => {
@@ -475,33 +511,37 @@ export const AviatorProvider: React.FC<{ children: React.ReactNode }> = ({ child
     [activeBookmaker, currentElo]
   );
 
-  // Main Aviator Game Loop with High-Performance Autonomous Bot Engine
+  // Main Aviator Game Loop with High-Performance Autonomous Bot Engine (pure side-effect-free updaters)
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
     if (flightStatus === 'WAITING') {
-      // Autonomous Bot Decision Phase during WAITING
-      if (eaSettings.isRunning) {
+      const botCfg = eaSettingsRef.current;
+      if (botCfg.isRunning) {
+        let target1 = botCfg.autoCashout;
+        let stake1 = botCfg.baseBet;
+        if (botCfg.strategy === 'CONSERVATIVE_COMPOUND') {
+          target1 = 1.35;
+          stake1 = botCfg.baseBet * 1.2;
+        } else if (botCfg.strategy === 'KELLY_CRITERION') {
+          target1 = activeSignalRef.current.safeCashout || 1.85;
+          stake1 = Math.min(botCfg.maxBet, Math.max(10, Math.floor(botCfg.baseBet * 1.5)));
+        } else if (botCfg.strategy === 'PINK_HUNTER') {
+          target1 = 2.0;
+        }
+
+        const hasDualSlot =
+          botCfg.strategy === 'KELLY_CRITERION' || botCfg.strategy === 'PINK_HUNTER';
+        const stake2 = Math.max(10, Math.floor(botCfg.baseBet * 0.75));
+        const target2 = botCfg.strategy === 'PINK_HUNTER' ? 10.0 : 3.5;
+
         setBetSlot1((prev) => {
           if (prev.isPlaced) return prev;
-          let target = eaSettings.autoCashout;
-          let stake = eaSettings.baseBet;
-
-          if (eaSettings.strategy === 'CONSERVATIVE_COMPOUND') {
-            target = 1.35;
-            stake = eaSettings.baseBet * 1.2;
-          } else if (eaSettings.strategy === 'KELLY_CRITERION') {
-            target = activeSignalRef.current.safeCashout || 1.85;
-            stake = Math.min(eaSettings.maxBet, Math.max(10, Math.floor(eaSettings.baseBet * 1.5)));
-          } else if (eaSettings.strategy === 'PINK_HUNTER') {
-            target = 2.0;
-          }
-
           return {
             ...prev,
-            amount: stake,
+            amount: stake1,
             autoCashoutEnabled: true,
-            autoCashoutMultiplier: target,
+            autoCashoutMultiplier: target1,
             isPlaced: true,
             isCashedOut: false,
             cashoutPrice: null,
@@ -509,14 +549,12 @@ export const AviatorProvider: React.FC<{ children: React.ReactNode }> = ({ child
           };
         });
 
-        // Dual Slot Hedge for Kelly & Pink Hunter strategies
-        if (eaSettings.strategy === 'KELLY_CRITERION' || eaSettings.strategy === 'PINK_HUNTER') {
+        if (hasDualSlot) {
           setBetSlot2((prev) => {
             if (prev.isPlaced) return prev;
-            const target2 = eaSettings.strategy === 'PINK_HUNTER' ? 10.0 : 3.5;
             return {
               ...prev,
-              amount: Math.max(10, Math.floor(eaSettings.baseBet * 0.75)),
+              amount: stake2,
               autoCashoutEnabled: true,
               autoCashoutMultiplier: target2,
               isPlaced: true,
@@ -526,194 +564,333 @@ export const AviatorProvider: React.FC<{ children: React.ReactNode }> = ({ child
             };
           });
         }
+
+        const currentRoundSeq = roundCounterRef.current;
+        if (announcedBotRoundRef.current !== currentRoundSeq) {
+          announcedBotRoundRef.current = currentRoundSeq;
+          speechNotifier.speak({
+            category: 'BOT_ENTRY',
+            severity: 'HIGH',
+            title: `Aviator EA Entry (${bookmakerInfo.name})`,
+            message: hasDualSlot
+              ? `Aviator bot entered round ${currentRoundSeq + 1} on ${bookmakerInfo.name}: slot one ${stake1} at ${target1.toFixed(2)} x, slot two ${stake2} at ${target2.toFixed(2)} x.`
+              : `Aviator bot entered round ${currentRoundSeq + 1} on ${bookmakerInfo.name} with ${stake1} targeting ${target1.toFixed(2)} x.`,
+            dedupeKey: `aviator-entry-${currentRoundSeq}`,
+            cooldownMs: 3000,
+          });
+        }
       }
 
+      let countdown = countdownSeconds;
       interval = setInterval(() => {
-        setCountdownSeconds((prev) => {
-          if (prev <= 1) {
-            // Launch flight!
-            isCrashedProcessedRef.current = false;
-            setFlightStatus('FLYING');
-            setCurrentMultiplier(1.0);
-            return 4;
-          }
-          return prev - 1;
-        });
+        countdown -= 1;
+        if (countdown <= 0) {
+          isCrashedProcessedRef.current = false;
+          multiplierRef.current = 1.0;
+          setCurrentMultiplier(1.0);
+          setCountdownSeconds(4);
+          setFlightStatus('FLYING');
+        } else {
+          setCountdownSeconds(countdown);
+        }
       }, 1000);
     } else if (flightStatus === 'FLYING') {
-      // Exponential supersonic flight trajectory
       const startTime = Date.now();
       interval = setInterval(() => {
-        setCurrentMultiplier((prev) => {
-          const speedFactor = 0.035 + (prev > 10 ? 0.09 : prev > 5 ? 0.06 : prev > 2 ? 0.045 : 0.025);
-          const nextVal = +(prev + speedFactor).toFixed(2);
+        if (isCrashedProcessedRef.current) return;
 
-          // Check Auto-Cashout for Slot 1
-          setBetSlot1((b1) => {
-            if (b1.isPlaced && !b1.isCashedOut && b1.autoCashoutEnabled && nextVal >= b1.autoCashoutMultiplier) {
-              const profit = +(b1.amount * b1.autoCashoutMultiplier - b1.amount).toFixed(2);
-              if (eaSettings.isRunning) {
-                setEaWinCount((w) => w + 1);
-                setEaTotalProfit((p) => +(p + profit).toFixed(2));
-              }
-              return { ...b1, isCashedOut: true, cashoutPrice: b1.autoCashoutMultiplier, pnl: profit };
-            }
-            return b1;
+        const prev = multiplierRef.current;
+        const speedFactor = 0.035 + (prev > 10 ? 0.09 : prev > 5 ? 0.06 : prev > 2 ? 0.045 : 0.025);
+        const nextVal = +(prev + speedFactor).toFixed(2);
+        const botRunning = eaSettingsRef.current.isRunning;
+        const flightSeq = roundCounterRef.current;
+
+        if (nextVal >= 10.0 && announced10xRoundRef.current !== flightSeq) {
+          announced10xRoundRef.current = flightSeq;
+          speechNotifier.speak({
+            category: 'CRITICAL_MOVE',
+            severity: 'CRITICAL',
+            title: `10.00x Pink Moonshot Surge`,
+            message: `Critical flight surge: multiplier crossed 10.00 x Pink Moonshot zone on ${bookmakerInfo.name}.`,
+            dedupeKey: `aviator-10x-${flightSeq}`,
+            cooldownMs: 4000,
           });
-
-          // Check Auto-Cashout for Slot 2
-          setBetSlot2((b2) => {
-            if (b2.isPlaced && !b2.isCashedOut && b2.autoCashoutEnabled && nextVal >= b2.autoCashoutMultiplier) {
-              const profit = +(b2.amount * b2.autoCashoutMultiplier - b2.amount).toFixed(2);
-              if (eaSettings.isRunning) {
-                setEaWinCount((w) => w + 1);
-                setEaTotalProfit((p) => +(p + profit).toFixed(2));
-              }
-              return { ...b2, isCashedOut: true, cashoutPrice: b2.autoCashoutMultiplier, pnl: profit };
-            }
-            return b2;
+        } else if (nextVal >= 5.0 && announced5xRoundRef.current !== flightSeq) {
+          announced5xRoundRef.current = flightSeq;
+          speechNotifier.speak({
+            category: 'CRITICAL_MOVE',
+            severity: 'HIGH',
+            title: `5.00x High-Altitude Surge`,
+            message: `High multiplier surge passing 5.00 x on ${bookmakerInfo.name}.`,
+            dedupeKey: `aviator-5x-${flightSeq}`,
+            cooldownMs: 4000,
           });
+        }
 
-          // Check if reached crash target
-          if (nextVal >= crashTarget) {
-            if (isCrashedProcessedRef.current) return crashTarget;
-            isCrashedProcessedRef.current = true;
-            setFlightStatus('CRASHED');
-
-            // Record round with guaranteed monotonically increasing roundNumber
-            roundCounterRef.current += 1;
-            const newRoundNumber = roundCounterRef.current;
-            const uniqueRoundId = `R-${newRoundNumber}-${Date.now()}`;
-            const newElo = crashTarget > 5 ? currentElo + 18 : crashTarget > 2 ? currentElo + 6 : currentElo - 12;
-            const newPattern: CrashPatternType =
-              crashTarget >= 10 ? 'PINK_WAVE' : crashTarget < 1.5 ? 'BLUE_TRAP' : 'PURPLE_CLUSTER';
-
-            const roundServerSeed = randomHex(8);
-            const roundClientSeed = 'client_live_sa';
-            const roundHash = sha256Hex(`${roundServerSeed}:${roundClientSeed}:${newRoundNumber}`);
-
-            const newRound: CrashRound = {
-              id: uniqueRoundId,
-              roundNumber: newRoundNumber,
-              multiplier: crashTarget,
-              timestamp: Date.now(),
-              serverSeed: roundServerSeed,
-              clientSeed: roundClientSeed,
-              nonce: newRoundNumber,
-              hash: roundHash,
-              eloRating: newElo,
-              pattern: newPattern,
-              durationSeconds: +((Date.now() - startTime) / 1000).toFixed(1),
-            };
-
-            const updatedRounds = [newRound, ...roundsRef.current.slice(0, 49)];
-            setRounds(updatedRounds);
-            setCurrentElo(newElo);
-            setEloChange(newElo - currentElo);
-
-            // Handle un-cashed bets as loss & record in EA stats
-            setBetSlot1((b) => {
-              if (b.isPlaced && !b.isCashedOut) {
-                if (eaSettings.isRunning) {
-                  setEaLossCount((l) => l + 1);
-                  setEaTotalProfit((p) => +(p - b.amount).toFixed(2));
-                }
-                return { ...b, isPlaced: false, pnl: -b.amount };
-              }
-              return b;
+        // Evaluate auto-cashout cleanly outside state updaters
+        const b1 = betSlot1Ref.current;
+        if (b1.isPlaced && !b1.isCashedOut && b1.autoCashoutEnabled && nextVal >= b1.autoCashoutMultiplier) {
+          const profit1 = +(b1.amount * b1.autoCashoutMultiplier - b1.amount).toFixed(2);
+          const updatedB1 = { ...b1, isCashedOut: true, cashoutPrice: b1.autoCashoutMultiplier, pnl: profit1 };
+          betSlot1Ref.current = updatedB1;
+          setBetSlot1(updatedB1);
+          if (botRunning) {
+            consecutiveLossesRef.current = 0;
+            setEaWinCount((w) => w + 1);
+            setEaTotalProfit((p) => +(p + profit1).toFixed(2));
+            speechNotifier.speak({
+              category: 'OUTCOME',
+              severity: 'INFO',
+              title: `EA Slot 1 Cashed Out @ ${b1.autoCashoutMultiplier.toFixed(2)}x`,
+              message: `Aviator bot slot one cashed out at ${b1.autoCashoutMultiplier.toFixed(2)} x for plus ${profit1.toFixed(0)} ${bookmakerInfo.currency}.`,
+              dedupeKey: `aviator-win-1-${flightSeq}`,
+              cooldownMs: 2500,
             });
+          }
+        }
 
-            setBetSlot2((b) => {
-              if (b.isPlaced && !b.isCashedOut) {
-                if (eaSettings.isRunning) {
-                  setEaLossCount((l) => l + 1);
-                  setEaTotalProfit((p) => +(p - b.amount).toFixed(2));
-                }
-                return { ...b, isPlaced: false, pnl: -b.amount };
-              }
-              return b;
+        const b2 = betSlot2Ref.current;
+        if (b2.isPlaced && !b2.isCashedOut && b2.autoCashoutEnabled && nextVal >= b2.autoCashoutMultiplier) {
+          const profit2 = +(b2.amount * b2.autoCashoutMultiplier - b2.amount).toFixed(2);
+          const updatedB2 = { ...b2, isCashedOut: true, cashoutPrice: b2.autoCashoutMultiplier, pnl: profit2 };
+          betSlot2Ref.current = updatedB2;
+          setBetSlot2(updatedB2);
+          if (botRunning) {
+            consecutiveLossesRef.current = 0;
+            setEaWinCount((w) => w + 1);
+            setEaTotalProfit((p) => +(p + profit2).toFixed(2));
+            speechNotifier.speak({
+              category: 'OUTCOME',
+              severity: 'HIGH',
+              title: `EA Slot 2 Cashed Out @ ${b2.autoCashoutMultiplier.toFixed(2)}x`,
+              message: `Aviator bot slot two hit ${b2.autoCashoutMultiplier.toFixed(2)} x for plus ${profit2.toFixed(0)} ${bookmakerInfo.currency}.`,
+              dedupeKey: `aviator-win-2-${flightSeq}`,
+              cooldownMs: 2500,
             });
+          }
+        }
 
-            // Generate Next Algorithmic Prediction from the Prediction Engine
-            const nextSig = computePredictionSignal(
-              updatedRounds,
-              activeBookmaker,
-              newRoundNumber,
-              newElo
-            );
+        if (nextVal >= crashTarget) {
+          isCrashedProcessedRef.current = true;
+          multiplierRef.current = crashTarget;
+          setCurrentMultiplier(crashTarget);
+          setFlightStatus('CRASHED');
 
-            setCrashTarget(nextSig.predictedMultiplier);
-            setActiveSignal(nextSig);
-            setSignalsHistory((prev) => [nextSig, ...prev.slice(0, 29)]);
+          roundCounterRef.current += 1;
+          const newRoundNumber = roundCounterRef.current;
+          const uniqueRoundId = `R-${newRoundNumber}-${Date.now()}`;
+          const newElo = crashTarget > 5 ? currentElo + 18 : crashTarget > 2 ? currentElo + 6 : currentElo - 12;
+          const newPattern: CrashPatternType =
+            crashTarget >= 10 ? 'PINK_WAVE' : crashTarget < 1.5 ? 'BLUE_TRAP' : 'PURPLE_CLUSTER';
 
-            // Cooldown before next round
-            if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
-            cooldownTimerRef.current = setTimeout(() => {
-              isCrashedProcessedRef.current = false;
-              setFlightStatus('WAITING');
-              setCountdownSeconds(3);
-            }, 2500);
+          const roundServerSeed = randomHex(8);
+          const roundClientSeed = 'client_live_sa';
+          const roundHash = sha256Hex(`${roundServerSeed}:${roundClientSeed}:${newRoundNumber}`);
 
-            return crashTarget;
+          const newRound: CrashRound = {
+            id: uniqueRoundId,
+            roundNumber: newRoundNumber,
+            multiplier: crashTarget,
+            timestamp: Date.now(),
+            serverSeed: roundServerSeed,
+            clientSeed: roundClientSeed,
+            nonce: newRoundNumber,
+            hash: roundHash,
+            eloRating: newElo,
+            pattern: newPattern,
+            durationSeconds: +((Date.now() - startTime) / 1000).toFixed(1),
+          };
+
+          const updatedRounds = [newRound, ...roundsRef.current.slice(0, 49)];
+          roundsRef.current = updatedRounds;
+          setRounds(updatedRounds);
+          setCurrentElo(newElo);
+          setEloChange(newElo - currentElo);
+
+          // Settle un-cashed active slots cleanly
+          let roundLossDelta = 0;
+          let roundLossCount = 0;
+          const curB1 = betSlot1Ref.current;
+          if (curB1.isPlaced && !curB1.isCashedOut) {
+            const lostB1 = { ...curB1, isPlaced: false, pnl: -curB1.amount };
+            betSlot1Ref.current = lostB1;
+            setBetSlot1(lostB1);
+            if (botRunning) {
+              roundLossCount += 1;
+              roundLossDelta += curB1.amount;
+            }
+          }
+          const curB2 = betSlot2Ref.current;
+          if (curB2.isPlaced && !curB2.isCashedOut) {
+            const lostB2 = { ...curB2, isPlaced: false, pnl: -curB2.amount };
+            betSlot2Ref.current = lostB2;
+            setBetSlot2(lostB2);
+            if (botRunning) {
+              roundLossCount += 1;
+              roundLossDelta += curB2.amount;
+            }
+          }
+          if (roundLossCount > 0) {
+            setEaLossCount((l) => l + roundLossCount);
+            setEaTotalProfit((p) => +(p - roundLossDelta).toFixed(2));
+            consecutiveLossesRef.current += 1;
+
+            if (consecutiveLossesRef.current >= eaSettingsRef.current.consecutiveLossCircuitBreaker) {
+              speechNotifier.speak({
+                category: 'CRITICAL_MOVE',
+                severity: 'CRITICAL',
+                title: `EA Circuit Breaker Threshold (${consecutiveLossesRef.current} Losses)`,
+                message: `Warning: Aviator bot reached ${consecutiveLossesRef.current} consecutive losses after crash at ${crashTarget.toFixed(2)} x.`,
+                dedupeKey: `aviator-breaker-${newRoundNumber}`,
+                cooldownMs: 5000,
+              });
+            } else {
+              speechNotifier.speak({
+                category: 'OUTCOME',
+                severity: 'INFO',
+                title: `Round Crashed @ ${crashTarget.toFixed(2)}x`,
+                message: `Aviator round crashed at ${crashTarget.toFixed(2)} x. Bot stop loss absorbed ${roundLossDelta.toFixed(0)} ${bookmakerInfo.currency}.`,
+                dedupeKey: `aviator-loss-${newRoundNumber}`,
+                cooldownMs: 4000,
+              });
+            }
           }
 
-          return nextVal;
-        });
+          // Check 3+ consecutive Blue Trap warning
+          const recent3 = updatedRounds.slice(0, 3);
+          if (recent3.length === 3 && recent3.every((r) => r.multiplier < 1.5)) {
+            speechNotifier.speak({
+              category: 'CRITICAL_MOVE',
+              severity: 'CRITICAL',
+              title: 'Blue Trap Streak Warning (3x Sub-1.50x)',
+              message: `Critical Aviator market alert: 3 consecutive low blue traps detected. Exercise defensive sizing.`,
+              dedupeKey: `aviator-bluetrap-streak`,
+              cooldownMs: 15000,
+            });
+          }
+
+          const nextSig = computePredictionSignal(
+            updatedRounds,
+            activeBookmaker,
+            newRoundNumber,
+            newElo
+          );
+
+          setCrashTarget(nextSig.predictedMultiplier);
+          setActiveSignal(nextSig);
+          setSignalsHistory((prevSig) => [nextSig, ...prevSig.slice(0, 29)]);
+
+          if (nextSig.pattern === 'PINK_WAVE' || (nextSig.strength === 'STRONG' && nextSig.confidence >= 85)) {
+            speechNotifier.speak({
+              category: 'SIGNAL_ALERT',
+              severity: 'HIGH',
+              title: `${nextSig.pattern.replace(/_/g, ' ')} Signal (${nextSig.confidence}%)`,
+              message: `High confidence Aviator signal on ${nextSig.bookmaker}: projected ${nextSig.predictedMultiplier.toFixed(2)} x, safe cashout ${nextSig.safeCashout.toFixed(2)} x.`,
+              dedupeKey: `aviator-sig-${nextSig.id}`,
+              cooldownMs: 6000,
+            });
+          }
+
+          if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
+          cooldownTimerRef.current = setTimeout(() => {
+            isCrashedProcessedRef.current = false;
+            setFlightStatus('WAITING');
+            setCountdownSeconds(3);
+          }, 2500);
+          return;
+        }
+
+        multiplierRef.current = nextVal;
+        setCurrentMultiplier(nextVal);
       }, 70);
     }
 
     return () => clearInterval(interval);
-  }, [flightStatus, crashTarget, currentElo, activeBookmaker, eaSettings.isRunning, eaSettings.strategy, eaSettings.baseBet, eaSettings.autoCashout, eaSettings.maxBet]);
+  }, [flightStatus, crashTarget, currentElo, activeBookmaker, bookmakerInfo.name, bookmakerInfo.currency, eaSettings.isRunning]);
 
   const forceNextRound = useCallback(() => {
     setFlightStatus('WAITING');
     setCountdownSeconds(1);
   }, []);
 
+  const contextValue = useMemo(
+    () => ({
+      activeBookmaker,
+      setActiveBookmaker,
+      bookmakerInfo,
+      flightStatus,
+      currentMultiplier,
+      countdownSeconds,
+      crashTarget,
+      rounds,
+      currentElo,
+      eloChange,
+      activeSignal,
+      signalsHistory,
+      generateSignalScan,
+      soundEnabled,
+      setSoundEnabled,
+      betSlot1,
+      setBetSlot1,
+      betSlot2,
+      setBetSlot2,
+      placeBet,
+      cashoutBet,
+      cancelBet,
+      eaSettings,
+      setEaSettings,
+      toggleEaBot,
+      eaTotalProfit,
+      eaWinCount,
+      eaLossCount,
+      telegramBotToken,
+      setTelegramBotToken,
+      telegramChatId,
+      setTelegramChatId,
+      discordWebhookUrl,
+      setDiscordWebhookUrl,
+      isAutoBroadcast,
+      setIsAutoBroadcast,
+      broadcastSignal,
+      verifyHash,
+      forceNextRound,
+    }),
+    [
+      activeBookmaker,
+      bookmakerInfo,
+      flightStatus,
+      currentMultiplier,
+      countdownSeconds,
+      crashTarget,
+      rounds,
+      currentElo,
+      eloChange,
+      activeSignal,
+      signalsHistory,
+      generateSignalScan,
+      soundEnabled,
+      betSlot1,
+      betSlot2,
+      placeBet,
+      cashoutBet,
+      cancelBet,
+      eaSettings,
+      toggleEaBot,
+      eaTotalProfit,
+      eaWinCount,
+      eaLossCount,
+      telegramBotToken,
+      telegramChatId,
+      discordWebhookUrl,
+      isAutoBroadcast,
+      broadcastSignal,
+      verifyHash,
+      forceNextRound,
+    ]
+  );
+
   return (
-    <AviatorContext.Provider
-      value={{
-        activeBookmaker,
-        setActiveBookmaker,
-        bookmakerInfo,
-        flightStatus,
-        currentMultiplier,
-        countdownSeconds,
-        crashTarget,
-        rounds,
-        currentElo,
-        eloChange,
-        activeSignal,
-        signalsHistory,
-        generateSignalScan,
-        soundEnabled,
-        setSoundEnabled,
-        betSlot1,
-        setBetSlot1,
-        betSlot2,
-        setBetSlot2,
-        placeBet,
-        cashoutBet,
-        cancelBet,
-        eaSettings,
-        setEaSettings,
-        toggleEaBot,
-        eaTotalProfit,
-        eaWinCount,
-        eaLossCount,
-        telegramBotToken,
-        setTelegramBotToken,
-        telegramChatId,
-        setTelegramChatId,
-        discordWebhookUrl,
-        setDiscordWebhookUrl,
-        isAutoBroadcast,
-        setIsAutoBroadcast,
-        broadcastSignal,
-        verifyHash,
-        forceNextRound,
-      }}
-    >
+    <AviatorContext.Provider value={contextValue}>
       {children}
     </AviatorContext.Provider>
   );

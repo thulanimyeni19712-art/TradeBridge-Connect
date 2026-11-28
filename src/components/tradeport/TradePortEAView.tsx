@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTrading } from '../../context/TradingContext';
+import { useBrand } from '../../context/BrandContext';
 import { GooglePickerButton } from '../picker/GooglePickerButton';
 import {
   Smartphone,
@@ -49,7 +50,25 @@ interface ReferralDevice {
 }
 
 export const TradePortEAView: React.FC = () => {
-  const { bridgeLatencyMs, executeKillSwitch } = useTrading();
+  const {
+    bridgeLatencyMs,
+    executeKillSwitch,
+    accountBalance,
+    accountEquity,
+    positions,
+    autonomousSnapshots,
+    runAutonomousCycle,
+  } = useTrading();
+  const { brand } = useBrand();
+  const sovereignDomain = `${brand.brandName.toLowerCase().replace(/[^a-z0-9]+/g, '') || 'apexsovereign'}.io`;
+  const [jokerCountdownSec, setJokerCountdownSec] = useState<number>(49);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setJokerCountdownSec((prev) => (prev <= 1 ? 49 : prev - 1));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, []);
 
   // Primary navigation tabs inside TradePort EA
   const [activeTab, setActiveTab] = useState<'PORTS' | 'PROVISION' | 'PLANS' | 'AFFILIATE'>('PORTS');
@@ -88,12 +107,12 @@ export const TradePortEAView: React.FC = () => {
     },
     {
       id: 'TP-LD4-2091',
-      label: 'Kante FX BOE Momentum Port',
+      label: 'Sovereign X2 BOE Momentum Port',
       platform: 'MT5',
       broker: 'Exness Real 09',
       server: 'Exness-Real9',
       accountLogin: '3381920',
-      eaFile: 'Nexus2_Kante_FX_AI.ex5',
+      eaFile: 'Sovereign_X2_AI.ex5',
       region: 'London Equinix LD4',
       pingMs: 1.1,
       status: 'ACTIVE',
@@ -105,12 +124,12 @@ export const TradePortEAView: React.FC = () => {
     },
     {
       id: 'TP-NY4-3118',
-      label: 'Liquidity Edge Classic MT4',
+      label: 'Liquidity Sweep Classic MT4',
       platform: 'MT4',
       broker: 'XM Global',
       server: 'XMGlobal-Real 24',
       accountLogin: '9104421',
-      eaFile: 'LiquidityEdge_SMC.ex4',
+      eaFile: 'LiquiditySweep_SMC.ex4',
       region: 'New York Equinix NY4',
       pingMs: 1.8,
       status: 'PAUSED',
@@ -147,7 +166,8 @@ export const TradePortEAView: React.FC = () => {
     { id: 'REF-05', traderName: 'Zanele Khumalo', device: 'iPhone 16 Pro (iOS)', platform: 'MT4', plan: '1-Month Fixed', status: 'EXPIRED', commissionUsd: 10.8, joinedDate: '2026-10-02' },
   ]);
 
-  const referralUrl = 'https://tradeportea.com/ref/THULANI-PRO';
+  const ownerSlug = brand.ownerName.trim().split(/\s+/)[0]?.toUpperCase() || 'SOVEREIGN';
+  const referralUrl = `https://${sovereignDomain}/ref/${ownerSlug}-PRO`;
 
   useEffect(() => {
     let active = true;
@@ -161,8 +181,8 @@ export const TradePortEAView: React.FC = () => {
           });
         }
       })
-      .catch(() => {
-        // Retain active session port list
+      .catch((err: unknown) => {
+        console.warn('TradePort ports fetch fell back to local cache:', err instanceof Error ? err.message : err);
       });
     return () => {
       active = false;
@@ -170,15 +190,27 @@ export const TradePortEAView: React.FC = () => {
   }, []);
 
   const handleCopy = (value: string, key: string) => {
-    navigator.clipboard.writeText(value);
+    void navigator.clipboard?.writeText(value).catch(() => undefined);
     setCopiedId(key);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleTogglePort = (id: string) => {
+  const handleTogglePort = async (id: string) => {
+    const existing = ports.find((p) => p.id === id);
+    if (!existing) return;
+    const nextStatus = existing.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
     setPorts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, status: p.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' } : p))
+      prev.map((p) => (p.id === id ? { ...p, status: nextStatus } : p))
     );
+    try {
+      await fetch(`/api/tradeport/ports/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+    } catch {
+      // Retain optimistic local toggle for built-in template slots
+    }
   };
 
   const handleProvisionPort = async (e: React.FormEvent) => {
@@ -328,18 +360,18 @@ export const TradePortEAView: React.FC = () => {
       {/* =========================================================================
           HEADER & TOP SUMMARY STRIP (Single-Elevation Surface)
           ========================================================================= */}
-      <div className="bg-[#070b14] border border-white/10 rounded-2xl p-6 sm:p-7 space-y-6">
+      <div className="glass-ultra border border-white/[0.12] rounded-2xl p-6 sm:p-7 space-y-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2.5 max-w-3xl">
             <div className="flex items-center gap-2 text-xs text-slate-400">
-              <span className="text-emerald-400 font-semibold">tradeportea.com</span>
+              <span className="text-emerald-400 font-semibold">{brand.brandName} ({sovereignDomain})</span>
               <span aria-hidden="true">·</span>
-              <span>Mobile MT4 / MT5 EA Cloud Hosting</span>
+              <span>{brand.ownerEntity}</span>
               <span aria-hidden="true">·</span>
-              <span>No PC Required</span>
+              <span>Mobile MT4 / MT5 Cloud Ports</span>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white font-orbitron tracking-tight leading-tight">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-white font-sans tracking-tight leading-tight">
               Run MetaTrader Robots 24/7 From Your Phone With Zero Recurring Traps
             </h1>
 
@@ -379,7 +411,7 @@ export const TradePortEAView: React.FC = () => {
             <button
               type="button"
               onClick={() => setActiveTab('PROVISION')}
-              className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold font-orbitron flex items-center gap-2 transition whitespace-nowrap shrink-0"
+              className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold font-sans flex items-center gap-2 transition whitespace-nowrap shrink-0"
             >
               <Server className="w-4 h-4" />
               <span>Deploy Cloud Port</span>
@@ -491,11 +523,100 @@ export const TradePortEAView: React.FC = () => {
           TAB 1: MOBILE CLOUD PORTS FLEET
           ========================================================================= */}
       {activeTab === 'PORTS' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="space-y-5">
+          {/* THE JOKER (Bcm_scalper 49s Ring) & NEXUS2.V1 (Exness-MT5Real30 Purple Glass) Quick Telemetry */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="glass-card border border-rose-500/35 rounded-2xl p-4 flex items-center justify-between gap-4">
+              <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-extrabold text-white font-sans">
+                    The joker (Bcm_scalper)
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-rose-500/15 border border-rose-400/35 text-[10px] font-bold text-rose-300">
+                    AccuMarkets-Live
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-300 truncate">
+                  {autonomousSnapshots.EURUSD
+                    ? `EURUSD 5M Bias: ${autonomousSnapshots.EURUSD.action} (${autonomousSnapshots.EURUSD.confidence}%) · RSI ${autonomousSnapshots.EURUSD.rsi14.toFixed(1)}`
+                    : 'Live EURUSD 5M Signal Listener Armed · Bridge Healthy'}
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => void runAutonomousCycle(true)}
+                    className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold transition"
+                  >
+                    RE AUTO TRADE
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(`EURUSD:${autonomousSnapshots.EURUSD?.action || 'HOLD'}`, 'joker-log')}
+                    className="px-2.5 py-1 rounded-lg bg-white/[0.07] hover:bg-white/[0.12] text-slate-200 text-[11px] font-bold transition"
+                  >
+                    {copiedId === 'joker-log' ? 'Copied' : 'Copy Log'}
+                  </button>
+                </div>
+              </div>
+              <div className="relative w-14 h-14 shrink-0 flex items-center justify-center">
+                <svg className="w-14 h-14 -rotate-90" viewBox="0 0 44 44">
+                  <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="4" />
+                  <circle
+                    cx="22"
+                    cy="22"
+                    r="18"
+                    fill="none"
+                    stroke="#f43f5e"
+                    strokeWidth="4"
+                    strokeDasharray={113}
+                    strokeDashoffset={113 - (113 * jokerCountdownSec) / 49}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="absolute text-xs font-black text-white tabular-nums">
+                  {jokerCountdownSec}s
+                </span>
+              </div>
+            </div>
+
+            <div
+              className="glass-card border border-amber-400/35 rounded-2xl p-4 flex items-center justify-between gap-4"
+              style={{
+                background:
+                  'linear-gradient(135deg, rgba(168,85,247,0.18), rgba(217,119,6,0.16), rgba(10,14,23,0.75))',
+              }}
+            >
+              <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-extrabold text-white font-sans">
+                    NEXUS2.V1 · Exness-MT5Real30
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-purple-500/20 border border-purple-400/40 text-[10px] font-bold text-purple-200">
+                    265-8DF-24C-595
+                  </span>
+                </div>
+                <div className="text-[11px] text-amber-200 tabular-nums">
+                  Balance: ${accountBalance.toLocaleString()} · Equity: ${accountEquity.toLocaleString()} · {positions.length} Live Tickets
+                </div>
+                <div className="text-[10px] text-slate-300">
+                  Glass UI Synced · Sub-millisecond Cloud Port Routing Active
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('PROVISION')}
+                className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold shrink-0 transition"
+              >
+                Mount EA
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {ports.map((port) => (
             <div
               key={port.id}
-              className="bg-[#070b14] border border-white/10 rounded-xl p-5 flex flex-col justify-between gap-4"
+              className="glass-card border border-white/15 rounded-xl p-5 flex flex-col justify-between gap-4"
             >
               <div className="space-y-3">
                 <div className="flex items-start justify-between gap-2 pb-3 border-b border-white/[0.08]">
@@ -505,7 +626,7 @@ export const TradePortEAView: React.FC = () => {
                       <span aria-hidden="true">·</span>
                       <span>{port.planTerm}</span>
                     </div>
-                    <h3 className="text-sm font-bold text-white font-orbitron mt-0.5">
+                    <h3 className="text-sm font-bold text-white font-sans mt-0.5">
                       {port.label}
                     </h3>
                   </div>
@@ -606,6 +727,7 @@ export const TradePortEAView: React.FC = () => {
               </div>
             </div>
           ))}
+          </div>
         </div>
       )}
 
@@ -619,7 +741,7 @@ export const TradePortEAView: React.FC = () => {
         >
           <div className="border-b border-white/[0.08] pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-bold text-white font-orbitron">
+              <h2 className="text-base font-bold text-white font-sans">
                 Deploy New 24/7 Cloud Port
               </h2>
               <p className="text-xs text-slate-400 font-sans mt-0.5">
@@ -746,7 +868,7 @@ export const TradePortEAView: React.FC = () => {
             <button
               type="submit"
               disabled={isProvisioning}
-              className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold font-orbitron flex items-center gap-2 transition disabled:opacity-50"
+              className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold font-sans flex items-center gap-2 transition disabled:opacity-50"
             >
               {isProvisioning ? (
                 <>
@@ -805,7 +927,7 @@ export const TradePortEAView: React.FC = () => {
                     <span className="text-xs font-bold text-emerald-400 block">{plan.title}</span>
                     <span className="text-[11px] text-slate-400 font-sans">{plan.audience}</span>
                     <div className="mt-3 flex items-baseline gap-2">
-                      <span className="text-3xl font-extrabold text-white font-orbitron tabular-nums">
+                      <span className="text-3xl font-extrabold text-white font-sans tabular-nums">
                         {currency === 'ZAR' ? `R${plan.zarPrice.toLocaleString()}` : `$${plan.usdPrice}`}
                       </span>
                       <span className="text-xs text-slate-400 font-sans">single payment</span>
@@ -865,7 +987,7 @@ export const TradePortEAView: React.FC = () => {
           <div className="lg:col-span-7 bg-[#070b14] border border-white/10 rounded-xl p-5 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.08]">
               <div>
-                <h3 className="text-sm font-bold text-white font-orbitron flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white font-sans flex items-center gap-2">
                   <Users className="w-4 h-4 text-emerald-400" />
                   <span>Connected Referral Devices</span>
                 </h3>
@@ -929,7 +1051,7 @@ export const TradePortEAView: React.FC = () => {
           {/* Right: Referral Link & Tiered Crypto Payout Request (5 cols) */}
           <div className="lg:col-span-5 bg-[#070b14] border border-white/10 rounded-xl p-5 space-y-5">
             <div className="space-y-2 pb-4 border-b border-white/[0.08]">
-              <h3 className="text-sm font-bold text-white font-orbitron">
+              <h3 className="text-sm font-bold text-white font-sans">
                 Mentor Referral Link (30% Tier)
               </h3>
               <div className="flex items-center gap-2">
@@ -992,7 +1114,7 @@ export const TradePortEAView: React.FC = () => {
               <button
                 type="submit"
                 disabled={isRequestingPayout || availableCommissionUsd <= 0}
-                className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold font-orbitron transition disabled:opacity-50"
+                className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold font-sans transition disabled:opacity-50"
               >
                 {isRequestingPayout
                   ? 'Processing On-Chain Settlement...'

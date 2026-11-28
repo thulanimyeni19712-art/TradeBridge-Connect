@@ -111,34 +111,32 @@ export const GoogleDriveIntegrationCard: React.FC = () => {
   };
 
   return (
-    <div className="rounded-2xl bg-gradient-to-r from-[#070c17] via-[#091122] to-[#070c17] border border-cyan-500/25 p-5 sm:p-6 shadow-xl space-y-5 font-mono text-slate-100">
+    <div className="rounded-xl bg-[#0F141E] border border-white/10 p-5 sm:p-6 shadow-xl space-y-5 text-slate-100">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 via-teal-500 to-blue-500 p-[2px] shadow-lg shadow-cyan-500/20">
-            <div className="w-full h-full bg-[#060913] rounded-[10px] flex items-center justify-center">
-              <svg className="w-6 h-6" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
-                <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
-                <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/>
-                <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
-                <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
-                <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
-                <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
-              </svg>
-            </div>
+          <div className="w-11 h-11 rounded-xl bg-[#161D2B] border border-white/10 flex items-center justify-center shrink-0">
+            <svg className="w-6 h-6" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
+              <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+              <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/>
+              <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
+              <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
+              <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
+              <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+            </svg>
           </div>
 
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-base sm:text-lg font-bold text-white font-orbitron">
+              <h3 className="text-base sm:text-lg font-bold text-white">
                 Google Picker &amp; Drive Cloud Storage
               </h3>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 uppercase">
-                LIVE OAUTH
+              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 uppercase">
+                Live OAuth
               </span>
             </div>
-            <p className="text-xs text-slate-400 font-sans mt-0.5">
-              Select and import real Expert Advisors, .set presets, and backtest logs directly from your Google Drive.
+            <p className="text-xs text-slate-400 mt-0.5">
+              Select and import Expert Advisors, .set presets, and backtest logs directly from your Google Drive.
             </p>
           </div>
         </div>
@@ -146,12 +144,12 @@ export const GoogleDriveIntegrationCard: React.FC = () => {
         {/* User Auth State */}
         <div className="flex items-center gap-2">
           {currentUser ? (
-            <div className="flex items-center gap-2 p-1.5 bg-slate-900/80 rounded-xl border border-white/10">
+            <div className="flex items-center gap-2 p-1.5 bg-[#161D2B] rounded-xl border border-white/10">
               <div className="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-xs">
                 {currentUser.displayName ? currentUser.displayName[0] : 'U'}
               </div>
               <div className="text-left text-xs pr-2">
-                <span className="block font-bold text-white leading-tight truncate max-w-[140px]">
+                <span className="block font-semibold text-white leading-tight truncate max-w-[140px]">
                   {currentUser.displayName || currentUser.email}
                 </span>
                 <span className="text-[10px] text-emerald-400">Connected</span>
@@ -176,21 +174,25 @@ export const GoogleDriveIntegrationCard: React.FC = () => {
             </div>
           ) : (
             <button
+              type="button"
               onClick={handleSignIn}
               disabled={isSigningIn}
-              className="px-4 py-2 rounded-xl bg-white text-slate-900 text-xs font-bold font-sans flex items-center gap-2 shadow-md hover:bg-slate-100 transition active:scale-95 disabled:opacity-50"
+              className="gsi-material-button"
             >
-              {isSigningIn ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <svg className="w-4 h-4" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3.05h3.9c2.28-2.1 3.64-5.2 3.64-9.14z"/>
-                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.9-3.05c-1.08.72-2.45 1.16-4.03 1.16-3.1 0-5.73-2.09-6.67-4.91H1.28v3.15C3.26 21.36 7.35 24 12 24z"/>
-                  <path fill="#FBBC05" d="M5.33 14.29c-.24-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.56H1.28C.46 8.19 0 10.04 0 12s.46 3.81 1.28 5.44l4.05-3.15z"/>
-                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.28 6.56l4.05 3.15c.94-2.82 3.57-4.96 6.67-4.96z"/>
-                </svg>
-              )}
-              <span>Sign in with Google</span>
+              <div className="gsi-material-button-state" />
+              <div className="gsi-material-button-content-wrapper">
+                <div className="gsi-material-button-icon">
+                  <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" style={{ display: 'block' }}>
+                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+                  </svg>
+                </div>
+                <span className="gsi-material-button-contents">
+                  {isSigningIn ? 'Signing in...' : 'Sign in with Google'}
+                </span>
+              </div>
             </button>
           )}
         </div>

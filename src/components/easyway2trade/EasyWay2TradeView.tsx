@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTrading } from '../../context/TradingContext';
+import { useBrand } from '../../context/BrandContext';
 import { RobotStrategy, TradingSignal, OrderSide } from '../../types/trading';
 import {
   Cpu,
@@ -25,6 +26,7 @@ interface EasyWay2TradeViewProps {
 }
 
 export const EasyWay2TradeView: React.FC<EasyWay2TradeViewProps> = ({ onExecuteSignal }) => {
+  const { brand } = useBrand();
   const { robots, signals, presets, downloadPreset } = useTrading();
   const [selectedRobot, setSelectedRobot] = useState<RobotStrategy>(robots[0]);
   const [activeRiskMode, setActiveRiskMode] = useState<'CONSERVATIVE' | 'MODERATE' | 'AGGRESSIVE'>('CONSERVATIVE');
@@ -40,15 +42,14 @@ export const EasyWay2TradeView: React.FC<EasyWay2TradeViewProps> = ({ onExecuteS
   return (
     <div className="space-y-6">
       {/* Hero Banner */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[#0c1424] via-[#09101c] to-[#120e24] border border-cyan-800/40 p-6 md:p-8 shadow-2xl">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative z-10 max-w-3xl space-y-3">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-mono font-medium">
+      <div className="relative rounded-2xl overflow-hidden bg-[#0F141E] border border-white/[0.08] p-6 md:p-8 shadow-xl">
+        <div className="relative z-10 max-w-3xl space-y-2.5">
+          <div className="flex items-center gap-2 text-cyan-300 text-xs font-mono font-medium">
             <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-            <span>EasyWay2Trade • Official Algorithmic Ecosystem</span>
+            <span>{brand.brandName} · {brand.ownerEntity} Algorithmic Ecosystem</span>
           </div>
-          <h2 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
-            Institutional Expert Advisors & Automated Trading Signals
+          <h2 className="text-2xl md:text-3xl font-bold text-white font-display tracking-tight">
+            Institutional Expert Advisors &amp; Automated Trading Signals
           </h2>
           <p className="text-sm text-slate-300 leading-relaxed">
             High-precision algorithmic trading robots designed for MetaTrader 4, MetaTrader 5, and Emerge Prop challenges. Built-in zero-martingale risk shields, ICT Fair Value Gap harvesters, and dynamic slippage filtering.
@@ -155,8 +156,8 @@ export const EasyWay2TradeView: React.FC<EasyWay2TradeViewProps> = ({ onExecuteS
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-xl font-bold text-slate-100">{selectedRobot.name}</h3>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-                {selectedRobot.activeStatus}
+              <span className="text-xs font-mono font-bold text-emerald-400">
+                · {selectedRobot.activeStatus}
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-1">
@@ -215,7 +216,7 @@ export const EasyWay2TradeView: React.FC<EasyWay2TradeViewProps> = ({ onExecuteS
             <div className="text-xs text-slate-400 uppercase font-mono">Verified Preset (.SET)</div>
             <div className="text-sm font-semibold text-slate-100 flex items-center gap-1.5">
               <Award className="w-4 h-4 text-amber-400" />
-              <span>Official EasyWay2Trade Presets</span>
+              <span>Official {brand.brandName} Presets</span>
             </div>
             <button
               onClick={() => {
@@ -231,7 +232,16 @@ export const EasyWay2TradeView: React.FC<EasyWay2TradeViewProps> = ({ onExecuteS
               }}
               className="w-full mt-1 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold text-xs font-mono rounded-lg transition flex items-center justify-center gap-1.5"
             >
-              <span>{presetDownloaded ? '✓ Preset Downloaded!' : `Download ${selectedRobot.codeName} .SET`}</span>
+              <span>
+                {presetDownloaded ? (
+                  <span className="inline-flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Preset Downloaded
+                  </span>
+                ) : (
+                  `Download ${selectedRobot.codeName} .SET`
+                )}
+              </span>
             </button>
           </div>
         </div>
@@ -241,14 +251,14 @@ export const EasyWay2TradeView: React.FC<EasyWay2TradeViewProps> = ({ onExecuteS
       <div className="bg-[#0b0e14] border border-slate-800 rounded-2xl p-6 shadow-xl">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Activity className="w-5 h-5 text-emerald-400 animate-pulse" />
+            <Activity className="w-5 h-5 text-emerald-400" />
             <h3 className="text-base font-bold text-slate-100 uppercase tracking-wider">
               Live Algorithmic Signal Radar
             </h3>
           </div>
-          <span className="text-xs text-emerald-400 font-mono flex items-center gap-1.5 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span>Scanning London & NY Liquidity Pools</span>
+          <span className="text-xs text-emerald-400 font-mono flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span>Scanning London &amp; NY Liquidity Pools</span>
           </span>
         </div>
 
@@ -284,7 +294,7 @@ export const EasyWay2TradeView: React.FC<EasyWay2TradeViewProps> = ({ onExecuteS
                   {sig.reason}
                 </p>
 
-                <div className="bg-[#0a0d14] rounded-lg p-2.5 border border-slate-800/80 grid grid-cols-3 gap-1 text-[11px] font-mono mb-3">
+                <div className="bg-[#090C12] rounded-lg p-2.5 border border-white/[0.08] grid grid-cols-3 gap-1 text-[11px] font-mono mb-3">
                   <div>
                     <span className="text-slate-500 block text-[9px]">Entry</span>
                     <span className="text-slate-200 font-bold">{sig.entryPrice}</span>

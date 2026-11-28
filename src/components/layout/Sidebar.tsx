@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTrading } from '../../context/TradingContext';
+import { useBrand } from '../../context/BrandContext';
 import {
   Zap,
   Activity,
@@ -8,26 +9,30 @@ import {
   Award,
   Server,
   Key,
+  KeyRound,
   Smartphone,
   ChevronLeft,
   ChevronRight,
-  Shield,
-  Sliders,
-  ExternalLink,
-  Lock,
-  PlusCircle,
-  Database,
-  Radio,
   Crosshair,
   Globe,
   Sparkles,
   Layers,
+  Calendar,
+  ScanLine,
+  Search,
+  X,
+  Cloud,
+  Share2,
+  GitMerge,
 } from 'lucide-react';
 
 export type MainNavTab =
+  | 'WORKSPACE'
+  | 'AI_SCANNER'
   | 'ALGOMAX'
   | 'ALGOADMIN'
   | 'NEXUS'
+  | 'EA_LAUNCHER'
   | 'AVIATOR'
   | 'BRIDGE'
   | 'AUTOTRADE'
@@ -37,10 +42,15 @@ export type MainNavTab =
   | 'EASYWAY'
   | 'EMERGE'
   | 'EACONNECT'
+  | 'EAMATRIX'
+  | 'ALGOHOST'
+  | 'EACENTRAL'
   | 'EAVAULT'
   | 'EACONVERTER'
   | 'EAMIGRATE'
-  | 'TRADEPORT';
+  | 'TRADEPORT'
+  | 'ITRADEBOT'
+  | 'EAMERGE';
 
 interface SidebarProps {
   currentTab: MainNavTab;
@@ -48,6 +58,7 @@ interface SidebarProps {
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   onOpenBrokerModal: () => void;
+  onOpenBrandStudio?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -56,311 +67,439 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isCollapsed,
   onToggleCollapse,
   onOpenBrokerModal,
+  onOpenBrandStudio,
 }) => {
   const {
     automatedSettings,
-    positions,
-    pendingOrders,
     challenge,
     mt5Credentials,
     bridgeLatencyMs,
+    positions,
   } = useTrading();
+  const { brand, accent, getModuleMeta } = useBrand();
+  const [navFilter, setNavFilter] = useState('');
 
   const primaryBroker = mt5Credentials.find((c) => c.isPrimary) || mt5Credentials[0];
 
-  const navGroups = [
-    {
-      title: 'MASTER COMMAND CENTER',
-      items: [
-        {
-          id: 'BRIDGE' as MainNavTab,
-          label: 'Titan Omni-Bridge',
-          subtext: 'Combined Matrix • Every Page in 1 Deck',
-          icon: Layers,
-          badge: 'ALL-IN-ONE',
-          badgeColor: 'bg-gradient-to-r from-cyan-500/20 to-teal-500/20 text-cyan-300 border-cyan-500/40 animate-pulse',
-        },
-      ],
-    },
-    {
-      title: 'ALGOMAX & ADMIN PORTAL',
-      items: [
-        {
-          id: 'ALGOMAX' as MainNavTab,
-          label: 'AlgoMax-EA.com',
-          subtext: 'Institutional MT4/MT5 AI Bot',
-          icon: Zap,
-          badge: 'NEW v5.2',
-          badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 animate-pulse',
-        },
-        {
-          id: 'ALGOADMIN' as MainNavTab,
-          label: 'AlgoAdminPortal.com',
-          subtext: 'Master Cloud Admin & Licenses',
-          icon: Server,
-          badge: 'ADMIN',
-          badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
-        },
-        {
-          id: 'EAMIGRATE' as MainNavTab,
-          label: 'EAMigratePro.vercel.app',
-          subtext: '24/7 Mobile Cloud VPS for EAs',
-          icon: Smartphone,
-          badge: 'NEW CLONE',
-          badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse',
-        },
-        {
-          id: 'TRADEPORT' as MainNavTab,
-          label: 'TradePortEA.com',
-          subtext: 'Fixed-Term Mobile VPS & Crypto Affiliates',
-          icon: Server,
-          badge: 'R600 / $36',
-          badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
-        },
-      ],
-    },
-    {
-      title: 'VIRAL ROBOT & AI SYSTEMS',
-      items: [
-        {
-          id: 'NEXUS' as MainNavTab,
-          label: 'Nexus2.v1 | KANTE FX',
-          subtext: 'Nexora AI 2.0 • Quick 3-Trade Setup',
-          icon: Sparkles,
-          badge: 'VIRAL EA',
-          badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40 animate-pulse',
-        },
-        {
-          id: 'LIQUIDITY_EDGE' as MainNavTab,
-          label: 'Liquidity Edge EA',
-          subtext: 'TikTok Viral • 077 600 4742',
-          icon: Crosshair,
-          badge: 'SMC BOT',
-          badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-        },
-        {
-          id: 'AVIATOR' as MainNavTab,
-          label: 'Nguni Aviator Pro v6',
-          subtext: "SA's Statistical Crash Engine",
-          icon: Zap,
-          badge: 'NEW v6',
-          badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-        },
-      ],
-    },
-    {
-      title: 'EXECUTION & AI CORE',
-      items: [
-        {
-          id: 'AUTOTRADE' as MainNavTab,
-          label: 'Auto-Pilot MT5 & AI Hub',
-          subtext: 'Zero-ruin & profit multiplier',
-          icon: Activity,
-          badge: automatedSettings.masterAutoTrading ? 'LIVE' : 'PAUSED',
-          badgeColor: automatedSettings.masterAutoTrading
-            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 animate-pulse'
-            : 'bg-rose-500/20 text-rose-400 border-rose-500/30',
-        },
-        {
-          id: 'SCRIPTS' as MainNavTab,
-          label: 'High-Level Scripts Vault',
-          subtext: 'MQL5, MQL4, PineScript, Python',
-          icon: Code,
-          badge: '6 Systems',
-          badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
-        },
-      ],
-    },
-    {
-      title: 'PROP FIRM & STRATEGY',
-      items: [
-        {
-          id: 'EMERGE' as MainNavTab,
-          label: 'Emerge Prop Evaluation',
-          subtext: 'Drawdown guard & certificates',
-          icon: Award,
-          badge: challenge.status === 'PASSED' ? 'PASSED' : `${challenge.profitTargetPct}% Target`,
-          badgeColor: challenge.status === 'PASSED'
-            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-            : 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-        },
-        {
-          id: 'EASYWAY' as MainNavTab,
-          label: 'EasyWay2Trade Bots',
-          subtext: 'Endgame HFT, Shadow River, Apex',
-          icon: Cpu,
-          badge: '4 Bots',
-          badgeColor: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-        },
-      ],
-    },
-    {
-      title: 'INFRASTRUCTURE & VAULT',
-      items: [
-        {
-          id: 'MAP' as MainNavTab,
-          label: 'Google Maps Financial Radar',
-          subtext: 'Global Exchanges & Equinix LD4/NY4',
-          icon: Globe,
-          badge: 'MAPS',
-          badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
-        },
-        {
-          id: 'EACONNECT' as MainNavTab,
-          label: 'EA-Connect Copier',
-          subtext: 'Multi-terminal VPS sync',
-          icon: Server,
-          badge: `${bridgeLatencyMs}ms`,
-          badgeColor: 'bg-slate-800 text-slate-300 border-slate-700',
-        },
-        {
-          id: 'EAVAULT' as MainNavTab,
-          label: 'EA-Vault License & Presets',
-          subtext: 'HWID encryption & .SET files',
-          icon: Key,
-          badge: undefined,
-          badgeColor: undefined,
-        },
-        {
-          id: 'EACONVERTER' as MainNavTab,
-          label: 'EA-Converter Admin',
-          subtext: 'Mobile activations & rebrand',
-          icon: Smartphone,
-          badge: 'White-Label',
-          badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
-        },
-      ],
-    },
-  ];
+  const navGroups = useMemo(
+    () => [
+      {
+        title: 'Command & AI',
+        items: [
+          {
+            id: 'BRIDGE' as MainNavTab,
+            ...getModuleMeta('BRIDGE'),
+            icon: Layers,
+            statusText: positions.length > 0 ? `${positions.length}` : undefined,
+            statusTone: accent.textClass,
+          },
+          {
+            id: 'AI_SCANNER' as MainNavTab,
+            ...getModuleMeta('AI_SCANNER'),
+            icon: ScanLine,
+            statusText: undefined,
+            statusTone: '',
+          },
+          {
+            id: 'AUTOTRADE' as MainNavTab,
+            ...getModuleMeta('AUTOTRADE'),
+            icon: Activity,
+            statusText: automatedSettings.masterAutoTrading ? 'Live' : 'Paused',
+            statusTone: automatedSettings.masterAutoTrading
+              ? 'text-emerald-400'
+              : 'text-rose-400',
+          },
+        ],
+      },
+      {
+        title: 'Execution & Bots',
+        items: [
+          {
+            id: 'EA_LAUNCHER' as MainNavTab,
+            ...getModuleMeta('EA_LAUNCHER'),
+            icon: Smartphone,
+            statusText: '11 Builds',
+            statusTone: 'text-rose-400',
+          },
+          {
+            id: 'EAMERGE' as MainNavTab,
+            ...getModuleMeta('EAMERGE'),
+            icon: GitMerge,
+            statusText: 'Fusion',
+            statusTone: 'text-emerald-400',
+          },
+          {
+            id: 'NEXUS' as MainNavTab,
+            ...getModuleMeta('NEXUS'),
+            icon: Sparkles,
+            statusText: undefined,
+            statusTone: '',
+          },
+          {
+            id: 'LIQUIDITY_EDGE' as MainNavTab,
+            ...getModuleMeta('LIQUIDITY_EDGE'),
+            icon: Crosshair,
+            statusText: undefined,
+            statusTone: '',
+          },
+          {
+            id: 'AVIATOR' as MainNavTab,
+            ...getModuleMeta('AVIATOR'),
+            icon: Zap,
+            statusText: undefined,
+            statusTone: '',
+          },
+          {
+            id: 'EASYWAY' as MainNavTab,
+            ...getModuleMeta('EASYWAY'),
+            icon: Cpu,
+            statusText: undefined,
+            statusTone: '',
+          },
+          {
+            id: 'ALGOMAX' as MainNavTab,
+            ...getModuleMeta('ALGOMAX'),
+            icon: Zap,
+            statusText: undefined,
+            statusTone: '',
+          },
+          {
+            id: 'ITRADEBOT' as MainNavTab,
+            ...getModuleMeta('ITRADEBOT'),
+            icon: Cpu,
+            statusText: undefined,
+            statusTone: '',
+          },
+        ],
+      },
+      {
+        title: 'Prop & Analytics',
+        items: [
+          {
+            id: 'EMERGE' as MainNavTab,
+            ...getModuleMeta('EMERGE'),
+            icon: Award,
+            statusText:
+              challenge.status === 'PASSED'
+                ? 'Passed'
+                : `${challenge.profitTargetPct}%`,
+            statusTone:
+              challenge.status === 'PASSED' ? 'text-emerald-400' : 'text-amber-400',
+          },
+          {
+            id: 'MAP' as MainNavTab,
+            ...getModuleMeta('MAP'),
+            icon: Globe,
+            statusText: undefined,
+            statusTone: '',
+          },
+          {
+            id: 'SCRIPTS' as MainNavTab,
+            ...getModuleMeta('SCRIPTS'),
+            icon: Code,
+            statusText: undefined,
+            statusTone: '',
+          },
+        ],
+      },
+      {
+        title: 'Cloud & Infrastructure',
+        items: [
+          {
+            id: 'WORKSPACE' as MainNavTab,
+            ...getModuleMeta('WORKSPACE'),
+            icon: Calendar,
+            statusText: undefined,
+            statusTone: '',
+          },
+          {
+            id: 'EACONNECT' as MainNavTab,
+            ...getModuleMeta('EACONNECT'),
+            icon: Server,
+            statusText: `${bridgeLatencyMs.toFixed(0)}ms`,
+            statusTone: 'text-slate-400',
+          },
+          {
+            id: 'EAMATRIX' as MainNavTab,
+            ...getModuleMeta('EAMATRIX'),
+            icon: Smartphone,
+            statusText: undefined,
+            statusTone: '',
+          },
+          {
+            id: 'ALGOHOST' as MainNavTab,
+            ...getModuleMeta('ALGOHOST'),
+            icon: Cloud,
+            statusText: undefined,
+            statusTone: '',
+          },
+          {
+            id: 'EACENTRAL' as MainNavTab,
+            ...getModuleMeta('EACENTRAL'),
+            icon: Share2,
+            statusText: undefined,
+            statusTone: '',
+          },
+          {
+            id: 'EAMIGRATE' as MainNavTab,
+            ...getModuleMeta('EAMIGRATE'),
+            icon: Smartphone,
+            statusText: undefined,
+            statusTone: '',
+          },
+          {
+            id: 'TRADEPORT' as MainNavTab,
+            ...getModuleMeta('TRADEPORT'),
+            icon: Server,
+            statusText: undefined,
+            statusTone: '',
+          },
+          {
+            id: 'EAVAULT' as MainNavTab,
+            ...getModuleMeta('EAVAULT'),
+            icon: Key,
+            statusText: undefined,
+            statusTone: '',
+          },
+          {
+            id: 'EACONVERTER' as MainNavTab,
+            ...getModuleMeta('EACONVERTER'),
+            icon: Smartphone,
+            statusText: undefined,
+            statusTone: '',
+          },
+          {
+            id: 'ALGOADMIN' as MainNavTab,
+            ...getModuleMeta('ALGOADMIN'),
+            icon: Server,
+            statusText: undefined,
+            statusTone: '',
+          },
+        ],
+      },
+    ],
+    [
+      positions.length,
+      automatedSettings.masterAutoTrading,
+      challenge.status,
+      challenge.profitTargetPct,
+      bridgeLatencyMs,
+      getModuleMeta,
+      accent.textClass,
+    ]
+  );
+
+  const filteredGroups = useMemo(() => {
+    const q = navFilter.trim().toLowerCase();
+    if (!q) return navGroups;
+    return navGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter(
+          (item) =>
+            item.label.toLowerCase().includes(q) ||
+            item.subtext.toLowerCase().includes(q) ||
+            item.id.toLowerCase().includes(q)
+        ),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [navGroups, navFilter]);
 
   return (
     <aside
-      className={`hidden lg:flex bg-[#080b11] border-r border-slate-800/80 flex-col justify-between transition-all duration-300 select-none z-30 shrink-0 font-mono ${
-        isCollapsed ? 'w-20' : 'w-72'
+      className={`hidden lg:flex bg-[#090C12]/72 backdrop-blur-2xl border-r border-white/[0.1] flex-col justify-between transition-all duration-200 select-none z-30 shrink-0 ${
+        isCollapsed ? 'w-[72px]' : 'w-64'
       }`}
     >
-      {/* Top Header Section inside Sidebar */}
-      <div className="p-3 border-b border-slate-800/80 flex items-center justify-between">
-        {!isCollapsed && (
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-              Control Deck
+      {/* Top Collapse + Filter Input */}
+      <div className="p-3 border-b border-white/[0.08] space-y-2.5">
+        <div className="flex items-center justify-between">
+          {!isCollapsed && (
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-display px-1">
+              Workspace Modules
             </span>
+          )}
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="p-1.5 rounded-lg bg-[#0F141E] hover:bg-[#141B29] border border-white/[0.08] text-slate-400 hover:text-white transition mx-auto lg:mx-0"
+            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {isCollapsed ? (
+              <ChevronRight className="w-4 h-4" />
+            ) : (
+              <ChevronLeft className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+
+        {!isCollapsed && (
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={navFilter}
+              onChange={(e) => setNavFilter(e.target.value)}
+              placeholder="Filter modules..."
+              className="w-full bg-[#0F141E] border border-white/[0.08] rounded-lg pl-8 pr-7 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500/50 transition"
+            />
+            {navFilter && (
+              <button
+                type="button"
+                onClick={() => setNavFilter('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200"
+                title="Clear filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
           </div>
         )}
-        <button
-          onClick={onToggleCollapse}
-          className="p-1.5 rounded-lg bg-[#0f141f] hover:bg-slate-800 text-slate-400 hover:text-white transition mx-auto"
-          title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-        </button>
       </div>
 
       {/* Nav Groups */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-6">
-        {navGroups.map((group, groupIdx) => (
-          <div key={groupIdx} className="space-y-1.5">
-            {!isCollapsed && (
-              <div className="px-3 py-1 text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">
-                {group.title}
-              </div>
-            )}
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-2.5 space-y-5">
+        {filteredGroups.length === 0 ? (
+          <div className="px-3 py-6 text-center text-xs text-slate-500">
+            No modules match &ldquo;{navFilter}&rdquo;
+          </div>
+        ) : (
+          filteredGroups.map((group) => (
+            <div key={group.title} className="space-y-1">
+              {!isCollapsed && (
+                <div className="px-2.5 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
+                  {group.title}
+                </div>
+              )}
 
-            <div className="space-y-1">
-              {group.items.map((item) => {
-                const IconComponent = item.icon;
-                const isActive = currentTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => onTabChange(item.id)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-xs transition relative group ${
-                      isActive
-                        ? 'bg-gradient-to-r from-cyan-950/80 to-[#101a2b] text-cyan-300 border border-cyan-500/50 shadow-lg shadow-cyan-950/40'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-[#0f1422]'
-                    }`}
-                    title={isCollapsed ? item.label : undefined}
-                  >
-                    <div
-                      className={`p-1.5 rounded-lg shrink-0 transition ${
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const IconComponent = item.icon;
+                  const isActive = currentTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => onTabChange(item.id)}
+                      title={isCollapsed ? item.label : undefined}
+                      className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs transition relative group ${
                         isActive
-                          ? 'bg-cyan-500 text-slate-950'
-                          : 'bg-[#121824] text-slate-400 group-hover:text-cyan-300'
+                          ? `bg-[#141B29] text-white border ${accent.borderClass}`
+                          : 'text-slate-400 hover:text-slate-100 hover:bg-[#0F141E] border border-transparent'
                       }`}
                     >
-                      <IconComponent className="w-4 h-4" />
-                    </div>
+                      <div
+                        className={`p-1.5 rounded-md shrink-0 transition ${
+                          isActive
+                            ? `${accent.bgClass} ${accent.textClass}`
+                            : `bg-[#0F141E] text-slate-400 group-hover:${accent.textClass}`
+                        }`}
+                      >
+                        <IconComponent className="w-4 h-4" />
+                      </div>
 
-                    {!isCollapsed && (
-                      <div className="flex-1 text-left truncate">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className={`truncate font-bold ${isActive ? 'text-white' : 'text-slate-200'}`}>
-                            {item.label}
-                          </span>
-                          {item.badge && (
+                      {!isCollapsed && (
+                        <div className="flex-1 min-w-0 text-left">
+                          <div className="flex items-center justify-between gap-2">
                             <span
-                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold border shrink-0 tabular-nums ${
-                                item.badgeColor || 'bg-slate-800 text-slate-400 border-slate-700'
+                              className={`truncate font-semibold whitespace-nowrap ${
+                                isActive ? 'text-white' : 'text-slate-200'
                               }`}
                             >
-                              {item.badge}
+                              {item.label}
                             </span>
-                          )}
+                            {item.statusText && (
+                              <span
+                                className={`text-[10px] font-mono font-semibold tabular-nums shrink-0 ${item.statusTone}`}
+                              >
+                                {item.statusText}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                            {item.subtext}
+                          </div>
                         </div>
-                        <div className="text-[10px] text-slate-500 truncate mt-0.5 font-sans">
-                          {item.subtext}
-                        </div>
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
-      {/* Connected Broker Quick-Card at Bottom */}
-      <div className="p-3 border-t border-slate-800/80 bg-[#06090e]">
+      {/* Connected Broker & Ownership Card at Bottom */}
+      <div className="p-2.5 border-t border-white/[0.08] bg-[#070A0F]/65 backdrop-blur-md space-y-2">
         {!isCollapsed ? (
-          <div className="p-3 rounded-xl bg-[#0d121c] border border-slate-800/80 space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-[11px] font-bold text-slate-200">
+          <div className="p-2.5 rounded-xl bg-[#0F141E] border border-white/[0.08] space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                <span className="text-xs font-semibold text-slate-100 truncate">
                   {primaryBroker ? primaryBroker.brokerName : 'IC Markets'}
                 </span>
               </div>
-              <span className="text-[10px] font-bold text-cyan-400">
+              <span className={`text-[10px] font-mono font-semibold ${accent.textClass} shrink-0`}>
                 {primaryBroker ? primaryBroker.accountType : 'LIVE'}
               </span>
             </div>
 
-            <div className="flex items-center justify-between text-[10px] text-slate-400 tabular-nums">
-              <span>Login: #{primaryBroker ? primaryBroker.login : '50294112'}</span>
-              <span className="text-emerald-400 font-bold">
+            <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono tabular-nums">
+              <span>#{primaryBroker ? primaryBroker.login : '50294112'}</span>
+              <span className="text-emerald-400 font-semibold">
                 ${primaryBroker ? primaryBroker.balance.toLocaleString() : '50,000'}
               </span>
             </div>
 
-            <button
-              onClick={onOpenBrokerModal}
-              className="w-full py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded-lg text-[10px] font-bold transition flex items-center justify-center gap-1 border border-slate-700"
-            >
-              <Server className="w-3 h-3" />
-              <span>Switch / Add Broker</span>
-            </button>
+            <div className="grid grid-cols-1 gap-1.5">
+              <button
+                type="button"
+                onClick={onOpenBrokerModal}
+                className="w-full py-1.5 px-2 bg-[#141B29] hover:bg-slate-800 text-slate-200 hover:text-white rounded-lg text-[11px] font-medium transition flex items-center justify-center gap-1.5 border border-white/[0.08]"
+              >
+                <Server className={`w-3 h-3 ${accent.textClass}`} />
+                <span>Broker Accounts</span>
+              </button>
+
+              {onOpenBrandStudio && (
+                <button
+                  type="button"
+                  onClick={onOpenBrandStudio}
+                  className="w-full py-1.5 px-2 bg-[#090C12] hover:bg-[#141B29] text-slate-300 hover:text-white rounded-lg text-[11px] font-medium transition flex items-center justify-between gap-1.5 border border-white/[0.08]"
+                  title={`Owned by ${brand.ownerName}`}
+                >
+                  <span className="flex items-center gap-1.5 truncate">
+                    <KeyRound className={`w-3 h-3 ${accent.textClass} shrink-0`} />
+                    <span className="truncate">Brand &amp; IP Studio</span>
+                  </span>
+                  <span className="text-[9px] font-mono text-emerald-400 shrink-0">100%</span>
+                </button>
+              )}
+            </div>
           </div>
         ) : (
-          <button
-            onClick={onOpenBrokerModal}
-            className="w-full p-2.5 rounded-xl bg-[#0d121c] border border-slate-800 hover:border-cyan-500/40 text-cyan-400 flex items-center justify-center transition"
-            title="Manage MT5 Broker Accounts"
-          >
-            <Server className="w-4 h-4" />
-          </button>
+          <div className="space-y-1.5">
+            <button
+              type="button"
+              onClick={onOpenBrokerModal}
+              className={`w-full p-2.5 rounded-lg bg-[#0F141E] border border-white/[0.08] ${accent.textClass} flex items-center justify-center transition`}
+              title="Manage MT5 Broker Accounts"
+            >
+              <Server className="w-4 h-4" />
+            </button>
+            {onOpenBrandStudio && (
+              <button
+                type="button"
+                onClick={onOpenBrandStudio}
+                className={`w-full p-2.5 rounded-lg bg-[#0F141E] border border-white/[0.08] ${accent.textClass} flex items-center justify-center transition`}
+                title="Brand & Full Ownership Studio"
+              >
+                <KeyRound className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         )}
       </div>
     </aside>

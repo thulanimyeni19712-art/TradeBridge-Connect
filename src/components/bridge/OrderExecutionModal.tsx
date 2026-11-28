@@ -114,10 +114,28 @@ export const OrderExecutionModal: React.FC<OrderExecutionModalProps> = ({
     }
   }, [usePipsForSLTP, slPips, tpPips, marketPrice, side, symbol, orderType, targetPrice, currentMkt]);
 
+  // Accurate USD value per 1 pip per 1.00 lot for every supported symbol
+  const getPipValuePerLotUSD = (sym: string): number => {
+    const eurUsdRate = prices['EURUSD']?.bid || 1.0842;
+    const usdJpyRate = prices['USDJPY']?.bid || 153.42;
+    const usdZarRate = prices['USDZAR']?.bid || 18.25;
+    if (sym === 'XAUUSD' || sym === 'XAUUSDm') return 10;
+    if (sym === 'XAGEURm') return 5 * eurUsdRate;
+    if (sym === 'US30' || sym === 'NAS100') return 10;
+    if (sym === 'BTCUSD') return 1;
+    if (sym === 'ETHUSD') return 0.1;
+    if (sym === 'USDJPY') return 1000 / usdJpyRate;
+    if (sym === 'GBPJPY') return 1000 / usdJpyRate;
+    if (sym === 'USDZAR') return 100 / usdZarRate;
+    return 10;
+  };
+
+  const pipValuePerLotUSD = getPipValuePerLotUSD(symbol);
+
   // Auto-calculate lot size if Sizing Mode is RISK_PCT or CASH_RISK
   useEffect(() => {
     if (!currentMkt) return;
-    const pipsDistance = parseFloat(slPips) || 20;
+    const pipsDistance = Math.max(0.1, parseFloat(slPips) || 20);
 
     let targetRiskUSD = 1000;
     if (sizingMode === 'RISK_PCT') {
@@ -127,27 +145,16 @@ export const OrderExecutionModal: React.FC<OrderExecutionModalProps> = ({
     }
 
     if (sizingMode !== 'LOTS') {
-      let lotResult = 1.0;
-      if (symbol === 'XAUUSD') {
-        // 1 pip = 0.1, 1 lot = $10 per pip
-        lotResult = targetRiskUSD / (pipsDistance * 10);
-      } else if (symbol === 'US30' || symbol === 'NAS100') {
-        lotResult = targetRiskUSD / (pipsDistance * 10);
-      } else if (symbol.includes('BTC') || symbol.includes('ETH')) {
-        lotResult = targetRiskUSD / (pipsDistance * 1);
-      } else {
-        // Standard Forex: 1 pip = $10 per lot
-        lotResult = targetRiskUSD / (pipsDistance * 10);
-      }
+      const lotResult = targetRiskUSD / (pipsDistance * pipValuePerLotUSD);
       setLots(Math.max(0.01, Number(lotResult.toFixed(2))));
     }
-  }, [sizingMode, riskPct, cashRisk, slPips, symbol, accountEquity, currentMkt]);
+  }, [sizingMode, riskPct, cashRisk, slPips, symbol, accountEquity, currentMkt, pipValuePerLotUSD]);
 
   // Calculate potential Risk and Reward in USD
   const pipsSLNum = parseFloat(slPips) || 0;
   const pipsTPNum = parseFloat(tpPips) || 0;
-  const potentialLossUSD = Number((pipsSLNum * 10 * lots).toFixed(2));
-  const potentialGainUSD = Number((pipsTPNum * 10 * lots).toFixed(2));
+  const potentialLossUSD = Number((pipsSLNum * pipValuePerLotUSD * lots).toFixed(2));
+  const potentialGainUSD = Number((pipsTPNum * pipValuePerLotUSD * lots).toFixed(2));
   const rrRatio = pipsSLNum > 0 ? (pipsTPNum / pipsSLNum).toFixed(2) : '0';
 
   if (!isOpen) return null;
@@ -157,18 +164,20 @@ export const OrderExecutionModal: React.FC<OrderExecutionModalProps> = ({
     setIsExecuting(true);
     setExecutionResult(null);
 
-    // Audio click effect simulation
     try {
-      const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.frequency.setValueAtTime(side === 'BUY' ? 880 : 660, audioCtx.currentTime);
-      gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.08);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.08);
+      const AudioCtx = window.AudioContext;
+      if (AudioCtx) {
+        const audioCtx = new AudioCtx();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.setValueAtTime(side === 'BUY' ? 880 : 660, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.08);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.08);
+      }
     } catch {
       // Audio context may be restricted before user gesture
     }
@@ -301,24 +310,18 @@ export const OrderExecutionModal: React.FC<OrderExecutionModalProps> = ({
           </div>
 
           {/* Live Quote Stream Display */}
-          <div className="bg-[#121620] border border-slate-800/80 rounded-xl p-3.5 flex items-center justify-between font-mono">
+          <div className="bg-[#121620] border border-white/[0.08] rounded-xl p-3.5 flex items-center justify-between">
             <div className="space-y-0.5">
-              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>BID (SELL)</span>
-              </div>
-              <div className="text-lg font-bold text-rose-400">{currentMkt.bid}</div>
+              <div className="text-[11px] text-slate-400 font-medium">BID (SELL)</div>
+              <div className="text-lg font-mono font-bold text-rose-400 tabular-nums">{currentMkt.bid}</div>
             </div>
-            <div className="text-center px-3 py-1 bg-slate-900 rounded-lg border border-slate-800 text-[11px] text-slate-400">
-              <div className="text-slate-500 text-[9px] uppercase">Spread</div>
-              <div className="text-cyan-400 font-bold">{currentMkt.spread} pips</div>
+            <div className="text-center px-3 py-1 bg-slate-900 rounded-lg border border-white/[0.08] text-[11px] text-slate-400">
+              <div className="text-slate-500 text-[10px]">Spread</div>
+              <div className="text-cyan-400 font-mono font-semibold tabular-nums">{currentMkt.spread} pips</div>
             </div>
             <div className="space-y-0.5 text-right">
-              <div className="text-[11px] text-slate-400 flex items-center justify-end gap-1.5">
-                <span>ASK (BUY)</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              </div>
-              <div className="text-lg font-bold text-emerald-400">{currentMkt.ask}</div>
+              <div className="text-[11px] text-slate-400 font-medium">ASK (BUY)</div>
+              <div className="text-lg font-mono font-bold text-emerald-400 tabular-nums">{currentMkt.ask}</div>
             </div>
           </div>
 

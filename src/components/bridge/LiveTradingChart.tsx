@@ -43,13 +43,16 @@ export const LiveTradingChart: React.FC<LiveTradingChartProps> = ({
   const [rawCandles, setRawCandles] = useState<Candle[]>([]);
   const [candleSource, setCandleSource] = useState<string>('Connecting...');
 
+  const digitsRef = React.useRef<number>(currentPriceObj?.digits ?? 2);
+  digitsRef.current = currentPriceObj?.digits ?? 2;
+
   useEffect(() => {
     let active = true;
     const loadCandles = async () => {
       const { candles: fetched, source } = await liveMarketData.fetchCandles(selectedSymbol, timeframe);
       if (!active) return;
       if (fetched.length > 0) {
-        const digits = prices[selectedSymbol]?.digits ?? 2;
+        const digits = digitsRef.current;
         const formatted: Candle[] = fetched.slice(-42).map((bar) => ({
           time: new Date(bar.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           open: Number(bar.open.toFixed(digits)),
@@ -68,7 +71,7 @@ export const LiveTradingChart: React.FC<LiveTradingChartProps> = ({
       active = false;
       clearInterval(timer);
     };
-  }, [selectedSymbol, timeframe, prices]);
+  }, [selectedSymbol, timeframe]);
 
   // Merge live real-time bid tick into active candle
   const candles = useMemo(() => {
@@ -156,7 +159,7 @@ export const LiveTradingChart: React.FC<LiveTradingChartProps> = ({
   const activeCandle = hoveredCandle || candles[candles.length - 1];
 
   return (
-    <div className="obsidian-panel hud-bracket rounded-2xl overflow-hidden font-mono text-xs relative">
+    <div className="obsidian-panel rounded-2xl overflow-hidden font-mono text-xs relative">
       {/* Chart Top Controls Bar */}
       <div className="p-3 sm:p-4 border-b border-white/[0.08] bg-black/40 backdrop-blur-md flex flex-wrap items-center justify-between gap-2.5">
         {/* Symbol Selector & Live Quote Tag */}
@@ -196,9 +199,7 @@ export const LiveTradingChart: React.FC<LiveTradingChartProps> = ({
 
         {/* Timeframe & Chart Style */}
         <div className="flex items-center gap-2">
-          {/* Real-time Indicator */}
-          <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 font-bold">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-400 font-medium tabular-nums">
             <span>{candleSource} ({ticksPerSecond} TPS)</span>
           </div>
 
@@ -258,7 +259,7 @@ export const LiveTradingChart: React.FC<LiveTradingChartProps> = ({
           <span>C: <strong className={activeCandle.close >= activeCandle.open ? 'text-emerald-400' : 'text-rose-400'}>{activeCandle.close}</strong></span>
           <span>VOL: <strong className="text-amber-400">{activeCandle.volume.toLocaleString()}</strong></span>
           {executionToast && (
-            <span className="ml-auto text-emerald-400 font-bold animate-pulse">
+            <span className="ml-auto text-emerald-400 font-semibold">
               {executionToast}
             </span>
           )}
@@ -383,7 +384,7 @@ export const LiveTradingChart: React.FC<LiveTradingChartProps> = ({
                 })}
 
               {/* Line Mode Rendering */}
-              {chartMode === 'LINE' && (
+              {chartMode === 'LINE' && candles.length > 1 && (
                 <path
                   d={candles
                     .map((c, i) => {
@@ -423,7 +424,7 @@ export const LiveTradingChart: React.FC<LiveTradingChartProps> = ({
                     y={((maxPrice - currentPriceObj.bid) / priceRange) * 210 + 24}
                     fill="#020617"
                     fontSize="10"
-                    fontWeight="900"
+                    fontWeight="700"
                   >
                     {currentPriceObj.bid}
                   </text>
@@ -437,15 +438,14 @@ export const LiveTradingChart: React.FC<LiveTradingChartProps> = ({
               return (
                 <div
                   key={pos.id}
-                  className="absolute left-4 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 z-10 border shadow-md backdrop-blur-md"
+                  className="absolute left-4 px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 z-10 border shadow-md backdrop-blur-md font-mono tabular-nums"
                   style={{
                     top: `${Math.max(10, Math.min(230, yPos))}px`,
-                    backgroundColor: pos.side === 'BUY' ? 'rgba(16,185,129,0.25)' : 'rgba(244,63,94,0.25)',
+                    backgroundColor: pos.side === 'BUY' ? 'rgba(16,185,129,0.2)' : 'rgba(244,63,94,0.2)',
                     borderColor: pos.side === 'BUY' ? '#10b981' : '#f43f5e',
                     color: pos.side === 'BUY' ? '#10b981' : '#f43f5e',
                   }}
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-current animate-ping" />
                   <span>#{pos.ticket} {pos.side} {pos.lots}L @ {pos.openPrice}</span>
                   <span className="ml-1 text-slate-200">({pos.pips >= 0 ? '+' : ''}{pos.pips}p)</span>
                 </div>

@@ -165,9 +165,9 @@ const AviatorInnerApp: React.FC = () => {
       id: 'ANALYTICS',
       title: 'ANALYTICS & 50-GAME RATIOS',
       icon: BarChart3,
-      iconColorClass: 'text-purple-400',
-      borderClass: 'border-purple-500/30',
-      expandIconColorClass: 'text-purple-400',
+      iconColorClass: 'text-cyan-400',
+      borderClass: 'border-white/[0.08]',
+      expandIconColorClass: 'text-cyan-400',
       content: <AviatorAnalyticsView />,
     },
     {
@@ -225,7 +225,7 @@ const AviatorInnerApp: React.FC = () => {
       />
 
       {/* Sub-Navigation Ribbon (Horizontal scrollable on mobile with layout toggle) */}
-      <div className="bg-[#070a10]/95 backdrop-blur-md border-b border-amber-500/20 px-3 py-2 -mx-4 sm:-mx-6 sm:px-6 sticky top-14 sm:top-16 z-30 font-mono">
+      <div className="bg-[#090C12]/95 backdrop-blur-md border-b border-white/[0.08] px-3 py-2 -mx-4 sm:-mx-6 sm:px-6 sticky top-14 sm:top-16 z-30 font-mono">
         <div className="flex items-center justify-between gap-3">
           {/* Sub-Tab Navigation Items */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 relative flex-1">
@@ -247,27 +247,26 @@ const AviatorInnerApp: React.FC = () => {
                       setViewLayout('DASHBOARD');
                     }}
                     aria-label={item.tooltip}
-                    className={`flex items-center gap-2 px-3 sm:px-3.5 py-1.5 rounded-xl font-orbitron text-xs font-bold transition-all ${
+                    className={`flex items-center gap-2 px-3 sm:px-3.5 py-1.5 rounded-lg font-sans text-xs font-semibold transition-all ${
                       isActive
-                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-[0_0_15px_rgba(232,185,35,0.25)] animate-subtle-breathe ring-1 ring-amber-400/30'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 border border-transparent'
+                        ? 'bg-amber-500/15 text-amber-300 border border-amber-500/40'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-[#0F141E] border border-transparent'
                     }`}
                   >
                     <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-amber-400' : 'text-slate-400 group-hover:text-amber-400 transition-colors'}`} />
                     <span className="whitespace-nowrap">{item.label}</span>
                     {item.badge && (
-                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-400/10 text-amber-300 border border-amber-400/30 font-mono">
-                        {item.badge}
+                      <span className="text-[10px] text-amber-400/90 font-mono">
+                        · {item.badge}
                       </span>
                     )}
                   </button>
 
                   {/* Hover-based Tooltip */}
                   {isHovered && (
-                    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95">
-                      <div className="relative px-3 py-1.5 rounded-lg bg-[#0c101a] border border-amber-500/40 text-slate-200 text-[11px] font-sans font-medium whitespace-nowrap shadow-2xl shadow-black/80 flex items-center gap-1.5">
-                        {/* Arrow Pointer */}
-                        <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#0c101a] border-t border-l border-amber-500/40 rotate-45" />
+                    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 pointer-events-none transition-all duration-150">
+                      <div className="relative px-3 py-1.5 rounded-lg bg-[#0F141E] border border-white/[0.12] text-slate-200 text-[11px] font-sans font-medium whitespace-nowrap shadow-lg flex items-center gap-1.5">
+                        <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#0F141E] border-t border-l border-white/[0.12] rotate-45" />
                         <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
                         <span>{item.tooltip}</span>
                       </div>
@@ -283,7 +282,7 @@ const AviatorInnerApp: React.FC = () => {
             <button
               onClick={() => setViewLayout('DASHBOARD')}
               title="Dashboard View (Single Active Module)"
-              className={`px-2.5 py-1 rounded-lg text-[10px] font-orbitron font-bold transition flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-sans font-bold transition flex items-center gap-1.5 ${
                 viewLayout === 'DASHBOARD'
                   ? 'bg-amber-500/25 text-amber-300 border border-amber-500/50 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -295,7 +294,7 @@ const AviatorInnerApp: React.FC = () => {
             <button
               onClick={() => setViewLayout('GRID')}
               title="Grid View (Compact Multi-Module Monitoring)"
-              className={`px-2.5 py-1 rounded-lg text-[10px] font-orbitron font-bold transition flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-sans font-bold transition flex items-center gap-1.5 ${
                 viewLayout === 'GRID'
                   ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-500/50 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -324,15 +323,15 @@ const AviatorInnerApp: React.FC = () => {
           /* Multi-Module Compact Command Grid */
           <div className="space-y-6">
             {/* Grid View Banner */}
-            <div className="p-3.5 bg-gradient-to-r from-[#0c1220] via-[#0a0f1c] to-[#120d22] border border-cyan-500/30 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-lg">
+            <div className="p-4 bg-[#0F141E] border border-white/[0.08] rounded-2xl flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                <div className="p-2 rounded-xl bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
                   <LayoutGrid className="w-4 h-4 text-cyan-400" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-orbitron font-black text-slate-100 uppercase tracking-wider flex items-center gap-2">
+                  <h3 className="text-xs font-sans font-bold text-slate-100 uppercase tracking-wider flex items-center gap-2">
                     <span>MULTI-MODULE RADAR COMMAND GRID</span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                   </h3>
                   <p className="text-[11px] text-slate-400 font-sans">
                     Simultaneous real-time monitoring across all Nguni Aviator intelligence modules
@@ -373,7 +372,7 @@ const AviatorInnerApp: React.FC = () => {
                 return (
                   <div
                     key={panel.id}
-                    className={`obsidian-panel hud-bracket rounded-2xl p-4 border ${panel.borderClass} relative ${
+                    className={`obsidian-panel rounded-2xl p-4 border ${panel.borderClass} relative ${
                       isMinimized ? '' : 'space-y-3'
                     }`}
                   >
@@ -384,7 +383,7 @@ const AviatorInnerApp: React.FC = () => {
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <PanelIcon className={`w-4 h-4 shrink-0 ${panel.iconColorClass}`} />
-                        <h4 className="font-orbitron font-black text-xs text-white uppercase tracking-wider truncate">
+                        <h4 className="font-sans font-bold text-xs text-white uppercase tracking-wider truncate">
                           {panel.title}
                         </h4>
                       </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTrading } from '../../context/TradingContext';
+import { useBrand } from '../../context/BrandContext';
 import {
   APIProvider,
   Map as GoogleMapComponent,
@@ -129,7 +130,7 @@ const FINANCIAL_HUBS: FinancialHub[] = [
     sessionStatus: 'OPEN',
     sessionHours: '07:00 – 15:30 UTC',
     primaryPairs: ['USDZAR', 'EURZAR', 'ALSI40', 'Aviator Engine'],
-    description: 'Home base for Liquidity Edge EA, Nguni Aviator algorithms, and African institutional DMA liquidity.',
+    description: 'Flagship desk core for Sovereign Liquidity Sweep algorithms, Crash Quant engines, and institutional DMA liquidity.',
     dailyVolumeUsd: '$210 Billion',
   },
   {
@@ -220,6 +221,7 @@ const FINANCIAL_HUBS: FinancialHub[] = [
 ];
 
 export const GlobalLiquidityMapView: React.FC = () => {
+  const { brand } = useBrand();
   const { bridgeLatencyMs } = useTrading();
   const [apiKey, setApiKey] = useState<string>(
     import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
@@ -245,13 +247,15 @@ export const GlobalLiquidityMapView: React.FC = () => {
   useEffect(() => {
     if (!apiKey) {
       fetch('/api/maps/config')
-        .then((res) => res.json())
+        .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
         .then((data) => {
           if (data?.apiKey) {
             setApiKey(data.apiKey);
           }
         })
-        .catch(() => {});
+        .catch((err: unknown) => {
+          console.warn('Maps config unavailable, using tactical projection view:', err instanceof Error ? err.message : err);
+        });
     }
   }, [apiKey]);
 
@@ -259,10 +263,14 @@ export const GlobalLiquidityMapView: React.FC = () => {
     const refDate = new Date(utcMinuteBucket * 60000);
     return FINANCIAL_HUBS.map((hub) => ({
       ...hub,
+      description:
+        hub.id === 'jse-johannesburg'
+          ? `Home base for ${brand.brandName} (${brand.ownerEntity}), Nguni Aviator algorithms, and African institutional DMA liquidity.`
+          : hub.description,
       latencyMs: hub.id === 'ld4-london' && bridgeLatencyMs > 0 ? Number(bridgeLatencyMs.toFixed(1)) : hub.latencyMs,
       sessionStatus: computeLiveSessionStatus(hub.id, refDate),
     }));
-  }, [utcMinuteBucket, bridgeLatencyMs]);
+  }, [utcMinuteBucket, bridgeLatencyMs, brand.brandName, brand.ownerEntity]);
 
   const selectedHub = useMemo(
     () => (selectedHubId ? liveHubs.find((h) => h.id === selectedHubId) ?? null : null),
@@ -296,23 +304,23 @@ export const GlobalLiquidityMapView: React.FC = () => {
   return (
     <div className="space-y-6 font-mono selection:bg-cyan-500/20 selection:text-cyan-300">
       {/* Top Banner */}
-      <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-[#0a101d] via-[#080d17] to-[#121024] border border-cyan-500/30 p-6 md:p-8 shadow-2xl">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative rounded-2xl overflow-hidden bg-[#0F141E] border border-white/[0.08] p-6 md:p-8 shadow-xl">
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-3 max-w-3xl">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-bold tracking-wider uppercase font-orbitron">
+          <div className="space-y-2.5 max-w-3xl">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+              <span className="inline-flex items-center gap-1.5 text-cyan-300 font-semibold font-sans">
                 <Globe className="w-3.5 h-3.5 text-cyan-400" />
-                Global Liquidity Topology • Institutional Layer
+                <span>{brand.brandName} · Global Liquidity Topology</span>
               </span>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold tabular-nums">
+              <span className="text-slate-600" aria-hidden="true">·</span>
+              <span className="inline-flex items-center gap-1 text-emerald-400 font-semibold tabular-nums">
                 <Clock className="w-3 h-3 text-emerald-400" />
-                {utcNow} UTC
+                <span>{utcNow} UTC</span>
               </span>
             </div>
 
-            <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight font-orbitron">
-              GLOBAL FINANCIAL <span className="text-cyan-400 text-glow-cyan">EXCHANGES</span> &amp; DMA RADAR
+            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight font-display">
+              Global Financial Exchanges &amp; DMA Radar
             </h1>
 
             <p className="text-sm text-slate-300 leading-relaxed font-sans">
@@ -380,11 +388,11 @@ export const GlobalLiquidityMapView: React.FC = () => {
       {/* Main Grid: Map Canvas & Interactive Nodes Sidebar */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2 Cols: Google Map or Interactive Vector Geo-Plot Fallback */}
-        <div className="lg:col-span-2 bg-[#060911] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl relative flex flex-col">
+        <div className="lg:col-span-2 bg-[#0F141E] border border-white/[0.08] rounded-2xl overflow-hidden shadow-2xl relative flex flex-col">
           <div className="px-5 py-3.5 border-b border-slate-800/80 flex items-center justify-between bg-[#080d18]/90">
             <div className="flex items-center gap-2">
               <Compass className="w-4 h-4 text-cyan-400" />
-              <span className="text-xs font-bold text-white uppercase tracking-wider font-orbitron">
+              <span className="text-xs font-bold text-white uppercase tracking-wider font-sans">
                 {apiKey ? 'Google Maps Dynamic Vector Engine' : 'Equinix / Teraco Vector Geo-Plot'}
               </span>
             </div>
@@ -557,11 +565,11 @@ export const GlobalLiquidityMapView: React.FC = () => {
         <div className="space-y-4 flex flex-col">
           {/* Selected Financial Node Inspector Card */}
           {selectedHub && (
-            <div className="bg-[#0c1220] border border-cyan-500/40 rounded-3xl p-5 shadow-2xl space-y-4">
+            <div className="bg-[#0F141E] border border-cyan-500/35 rounded-2xl p-5 shadow-2xl space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <div className="flex items-center gap-2">
                   <Server className="w-4 h-4 text-cyan-400" />
-                  <span className="text-xs font-bold text-white uppercase tracking-wider font-orbitron">
+                  <span className="text-xs font-bold text-white uppercase tracking-wider font-sans">
                     Selected Node Telemetry
                   </span>
                 </div>
@@ -579,7 +587,7 @@ export const GlobalLiquidityMapView: React.FC = () => {
               </div>
 
               <div>
-                <h3 className="text-lg font-bold text-white font-orbitron">{selectedHub.name}</h3>
+                <h3 className="text-lg font-bold text-white font-sans">{selectedHub.name}</h3>
                 <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1 tabular-nums">
                   <MapPin className="w-3 h-3 text-cyan-400" />
                   {selectedHub.city}, {selectedHub.country} · {selectedHub.sessionHours}
@@ -628,9 +636,9 @@ export const GlobalLiquidityMapView: React.FC = () => {
           )}
 
           {/* Scrollable Node Roster */}
-          <div className="bg-[#080d16] border border-slate-800 rounded-3xl p-4 flex-1 overflow-hidden flex flex-col">
+          <div className="bg-[#0F141E] border border-white/[0.08] rounded-2xl p-4 flex-1 overflow-hidden flex flex-col">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider font-orbitron tabular-nums">
+              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider font-sans tabular-nums">
                 Global Nodes Directory ({filteredHubs.length})
               </span>
               <span className="text-[10px] text-slate-400">Click to focus node</span>

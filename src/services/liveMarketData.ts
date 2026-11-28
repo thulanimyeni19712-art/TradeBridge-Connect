@@ -22,7 +22,9 @@ class LiveMarketDataService {
   private ws: WebSocket | null = null;
   private subscribers: PriceUpdateCallback[] = [];
   private isConnecting = false;
-  private restInterval: NodeJS.Timeout | null = null;
+  private manuallyStopped = false;
+  private restInterval: ReturnType<typeof setInterval> | null = null;
+  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private currentPrices: Record<string, MarketPrice> = {};
   public isRealtimeConnected = false;
   public ticksPerSecond = 0;
@@ -58,10 +60,14 @@ class LiveMarketDataService {
   }
 
   public startRealtimeFeeds() {
+    this.manuallyStopped = false;
     this.isConnecting = true;
     void this.fetchBackendLiveQuotes();
     this.connectBinanceWebSocket();
 
+    if (this.restInterval) {
+      clearInterval(this.restInterval);
+    }
     this.restInterval = setInterval(() => {
       void this.fetchBackendLiveQuotes();
     }, 2500);
@@ -221,6 +227,57 @@ class LiveMarketDataService {
             };
           }
 
+          if (rates.AUD) {
+            const audBid = Number((1 / rates.AUD).toFixed(5));
+            this.currentPrices['AUDUSD'] = {
+              symbol: 'AUDUSD',
+              name: 'Australian Dollar / US Dollar',
+              category: 'FOREX',
+              bid: audBid,
+              ask: Number((audBid + 0.00014).toFixed(5)),
+              spread: 1.4,
+              digits: 5,
+              change24h: this.currentPrices['AUDUSD']?.change24h ?? 0,
+              high: Math.max(this.currentPrices['AUDUSD']?.high ?? audBid, audBid),
+              low: Math.min(this.currentPrices['AUDUSD']?.low ?? audBid, audBid),
+              pipSize: 0.0001,
+            };
+          }
+
+          if (rates.CAD && rates.JPY) {
+            const cadjpy = Number(((1 / rates.CAD) * rates.JPY).toFixed(3));
+            this.currentPrices['CADJPY'] = {
+              symbol: 'CADJPY',
+              name: 'Canadian Dollar / Japanese Yen',
+              category: 'FOREX',
+              bid: cadjpy,
+              ask: Number((cadjpy + 0.018).toFixed(3)),
+              spread: 1.8,
+              digits: 3,
+              change24h: this.currentPrices['CADJPY']?.change24h ?? 0,
+              high: Math.max(this.currentPrices['CADJPY']?.high ?? cadjpy, cadjpy),
+              low: Math.min(this.currentPrices['CADJPY']?.low ?? cadjpy, cadjpy),
+              pipSize: 0.01,
+            };
+          }
+
+          if (rates.JPY) {
+            const usdjpy = Number(Number(rates.JPY).toFixed(3));
+            this.currentPrices['USDJPY'] = {
+              symbol: 'USDJPY',
+              name: 'US Dollar / Japanese Yen',
+              category: 'FOREX',
+              bid: usdjpy,
+              ask: Number((usdjpy + 0.011).toFixed(3)),
+              spread: 1.1,
+              digits: 3,
+              change24h: this.currentPrices['USDJPY']?.change24h ?? 0,
+              high: Math.max(this.currentPrices['USDJPY']?.high ?? usdjpy, usdjpy),
+              low: Math.min(this.currentPrices['USDJPY']?.low ?? usdjpy, usdjpy),
+              pipSize: 0.01,
+            };
+          }
+
           if (rates.ZAR) {
             const zarBid = Number(Number(rates.ZAR).toFixed(4));
             this.usdZarRate = zarBid;
@@ -274,8 +331,11 @@ class LiveMarketDataService {
 
       this.ws.onclose = () => {
         this.isRealtimeConnected = false;
-        setTimeout(() => {
-          if (this.subscribers.length > 0) {
+        this.ws = null;
+        if (this.manuallyStopped) return;
+        if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
+        this.reconnectTimeout = setTimeout(() => {
+          if (!this.manuallyStopped && this.subscribers.length > 0) {
             this.connectBinanceWebSocket();
           }
         }, 3000);
@@ -406,6 +466,11 @@ class LiveMarketDataService {
   }
 
   public stopRealtimeFeeds() {
+    this.manuallyStopped = true;
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
     if (this.ws) {
       this.ws.close();
       this.ws = null;

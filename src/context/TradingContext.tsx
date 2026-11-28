@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import {
   MarketPrice,
   Position,
@@ -23,6 +23,12 @@ import { liveMarketData } from '../services/liveMarketData';
 import { generateKeyCode, randomHex, sha256Hex } from '../lib/crypto';
 import { auth, dbFirestore, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { speechNotifier } from '../services/speechNotificationService';
+import {
+  analyzeLiveMarketStructure,
+  AutonomousSymbolAnalysis,
+  AutonomousDecisionLog,
+} from '../services/autonomousQuantEngine';
 
 interface NewOrderParams {
   symbol: string;
@@ -35,6 +41,7 @@ interface NewOrderParams {
   terminal?: string;
   comment?: string;
   maxSlippagePips?: number;
+  skipWebhookLog?: boolean;
 }
 
 export interface BatchOrderParams {
@@ -121,6 +128,12 @@ interface TradingContextType {
   setPrimaryMT5Broker: (id: string) => void;
   updateAutomatedSettings: (newSettings: Partial<AutomatedTradingSettings>) => void;
   toggleMasterAutoTrading: () => void;
+
+  // 100% Autonomous Live-Candle Quantitative Engine
+  autonomousSnapshots: Record<string, AutonomousSymbolAnalysis>;
+  autonomousDecisions: AutonomousDecisionLog[];
+  isAutonomousScanning: boolean;
+  runAutonomousCycle: (forceExecute?: boolean) => Promise<void>;
 }
 
 const INITIAL_PRICES: Record<string, MarketPrice> = {
@@ -241,7 +254,106 @@ const INITIAL_PRICES: Record<string, MarketPrice> = {
     low: 29.400,
     pipSize: 0.01,
   },
+  USDJPY: {
+    symbol: 'USDJPY',
+    name: 'US Dollar / Japanese Yen',
+    category: 'FOREX',
+    bid: 153.420,
+    ask: 153.431,
+    spread: 1.1,
+    digits: 3,
+    change24h: 0.34,
+    high: 154.100,
+    low: 152.650,
+    pipSize: 0.01,
+  },
+  GBPUSD: {
+    symbol: 'GBPUSD',
+    name: 'British Pound / US Dollar',
+    category: 'FOREX',
+    bid: 1.29420,
+    ask: 1.29434,
+    spread: 1.4,
+    digits: 5,
+    change24h: 0.21,
+    high: 1.29800,
+    low: 1.28950,
+    pipSize: 0.0001,
+  },
+  AUDUSD: {
+    symbol: 'AUDUSD',
+    name: 'Australian Dollar / US Dollar',
+    category: 'FOREX',
+    bid: 0.65840,
+    ask: 0.65854,
+    spread: 1.4,
+    digits: 5,
+    change24h: -0.18,
+    high: 0.66200,
+    low: 0.65500,
+    pipSize: 0.0001,
+  },
+  CADJPY: {
+    symbol: 'CADJPY',
+    name: 'Canadian Dollar / Japanese Yen',
+    category: 'FOREX',
+    bid: 110.180,
+    ask: 110.198,
+    spread: 1.8,
+    digits: 3,
+    change24h: 0.42,
+    high: 110.650,
+    low: 109.700,
+    pipSize: 0.01,
+  },
+  USDZAR: {
+    symbol: 'USDZAR',
+    name: 'US Dollar / South African Rand',
+    category: 'FOREX',
+    bid: 18.1450,
+    ask: 18.1650,
+    spread: 2.0,
+    digits: 4,
+    change24h: -0.35,
+    high: 18.3200,
+    low: 18.0200,
+    pipSize: 0.001,
+  },
 };
+
+export function resolveMarketPrice(
+  pricesMap: Record<string, MarketPrice>,
+  rawSymbol: string
+): MarketPrice | undefined {
+  if (!rawSymbol) return undefined;
+  if (pricesMap[rawSymbol]) return pricesMap[rawSymbol];
+
+  const stripped = rawSymbol
+    .toUpperCase()
+    .replace(/\.(M|MIC|PRO|ECN|RAW|STD|FX)$/i, '')
+    .replace(/(MIC|PRO|ECN)$/i, '')
+    .replace(/([A-Z]{6})M$/i, '$1');
+
+  if (pricesMap[stripped]) {
+    return { ...pricesMap[stripped], symbol: rawSymbol };
+  }
+
+  // Fallback synthetic quote derived from core FX feed for custom pairs
+  const isJpy = stripped.includes('JPY');
+  const isIndex = /^(US30|NAS100|SPX500|GER40|UK100)/.test(stripped);
+  const base = pricesMap['EURUSD'] || pricesMap['XAUUSD'];
+  if (!base) return undefined;
+
+  if (isIndex) {
+    const idxBase = pricesMap['US30'] || base;
+    return { ...idxBase, symbol: rawSymbol };
+  }
+  if (isJpy) {
+    const jpyBase = pricesMap['USDJPY'] || base;
+    return { ...jpyBase, symbol: rawSymbol, digits: 3, pipSize: 0.01 };
+  }
+  return { ...base, symbol: rawSymbol };
+}
 
 const INITIAL_TERMINALS: TerminalInstance[] = [
   {
@@ -931,13 +1043,13 @@ const INITIAL_MOBILE_ACTIVATIONS: MobileActivation[] = [
 ];
 
 const INITIAL_BRAND_CONFIG: BrandConfig = {
-  brandName: 'EA Converter',
-  mentorId: 'MTR-88392',
-  tagline: 'Mobile Trading Automation & Cloud EA Hosting',
-  mobileAppName: 'EA Converter Mobile',
-  supportHandle: '@EAConverterSupport',
+  brandName: 'APEX SOVEREIGN',
+  mentorId: 'MTR-MYENI-01',
+  tagline: 'Proprietary Quantitative Execution & Mobile Hosting',
+  mobileAppName: 'APEX SOVEREIGN Mobile',
+  supportHandle: '@ApexSovereignDesk',
   primaryColor: '#06b6d4',
-  customDomain: 'ea-converter.com',
+  customDomain: 'apexsovereign.io',
   logoIcon: 'Zap',
 };
 
@@ -1007,12 +1119,18 @@ const INITIAL_AUTOMATED_SETTINGS: AutomatedTradingSettings = {
 
 const TradingContext = createContext<TradingContextType | undefined>(undefined);
 
-const WORKSPACE_STORAGE_KEY = 'algotrade_matrix_workspace_v2';
+const WORKSPACE_STORAGE_PREFIX = 'algotrade_matrix_workspace_v2';
 
-function loadWorkspaceSnapshot() {
+function getWorkspaceStorageKey(uid: string | null): string {
+  return uid ? `${WORKSPACE_STORAGE_PREFIX}_${uid}` : `${WORKSPACE_STORAGE_PREFIX}_guest`;
+}
+
+function loadWorkspaceSnapshot(uid: string | null) {
   try {
     if (typeof window === 'undefined') return null;
-    const raw = localStorage.getItem(WORKSPACE_STORAGE_KEY);
+    const raw =
+      localStorage.getItem(getWorkspaceStorageKey(uid)) ??
+      (!uid ? localStorage.getItem(WORKSPACE_STORAGE_PREFIX) : null);
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
@@ -1020,7 +1138,8 @@ function loadWorkspaceSnapshot() {
 }
 
 export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const savedSnapshot = React.useMemo(() => loadWorkspaceSnapshot(), []);
+  const initialUid = auth.currentUser?.uid ?? null;
+  const savedSnapshot = React.useMemo(() => loadWorkspaceSnapshot(initialUid), [initialUid]);
   const ticketSeqRef = React.useRef<number>(8940500);
   const nextTicket = () => {
     ticketSeqRef.current += 1;
@@ -1056,17 +1175,32 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isBridgeConnected, setIsBridgeConnected] = useState<boolean>(true);
   const [isRealtimeFeedActive, setIsRealtimeFeedActive] = useState<boolean>(true);
   const [ticksPerSecond, setTicksPerSecond] = useState<number>(4);
+  const [autonomousSnapshots, setAutonomousSnapshots] = useState<Record<string, AutonomousSymbolAnalysis>>({});
+  const [autonomousDecisions, setAutonomousDecisions] = useState<AutonomousDecisionLog[]>([]);
+  const [isAutonomousScanning, setIsAutonomousScanning] = useState<boolean>(false);
   const [firebaseUid, setFirebaseUid] = useState<string | null>(() => auth.currentUser?.uid ?? null);
-  const skipNextRemoteWriteRef = React.useRef<boolean>(false);
+  const lastSyncedPayloadRef = React.useRef<string>('');
   const pricesRef = React.useRef<Record<string, MarketPrice>>(prices);
   const positionsRef = React.useRef<Position[]>(positions);
   const pendingOrdersRef = React.useRef<PendingOrder[]>(pendingOrders);
+  const terminalsRef = React.useRef<TerminalInstance[]>(terminals);
+  const presetsRef = React.useRef<EAPreset[]>(presets);
+  const brandConfigRef = React.useRef<BrandConfig>(brandConfig);
   const bridgeLatencyRef = React.useRef<number>(bridgeLatencyMs);
+  const automatedSettingsRef = React.useRef<AutomatedTradingSettings>(automatedSettings);
+  const accountBalanceRef = React.useRef<number>(accountBalance);
+  const lastAutoTradeTimeRef = React.useRef<Record<string, number>>({});
+  const isScanningRef = React.useRef<boolean>(false);
 
   pricesRef.current = prices;
   positionsRef.current = positions;
   pendingOrdersRef.current = pendingOrders;
+  terminalsRef.current = terminals;
+  presetsRef.current = presets;
+  brandConfigRef.current = brandConfig;
   bridgeLatencyRef.current = bridgeLatencyMs;
+  automatedSettingsRef.current = automatedSettings;
+  accountBalanceRef.current = accountBalance;
 
   // Persist real MT5 credentials
   useEffect(() => {
@@ -1079,12 +1213,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [mt5Credentials]);
 
-  // Persist workspace to localStorage
+  // Persist workspace to localStorage scoped per UID
   useEffect(() => {
     try {
       if (typeof window !== 'undefined') {
         localStorage.setItem(
-          WORKSPACE_STORAGE_KEY,
+          getWorkspaceStorageKey(firebaseUid),
           JSON.stringify({
             accountBalance,
             positions,
@@ -1100,12 +1234,37 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch {
       // Ignore storage quota issues
     }
-  }, [accountBalance, positions, pendingOrders, orderHistory, licenses, convertedEAs, mobileActivations, automatedSettings]);
+  }, [firebaseUid, accountBalance, positions, pendingOrders, orderHistory, licenses, convertedEAs, mobileActivations, automatedSettings]);
 
   // Subscribe to Firebase Auth & sync per-user workspace in Firestore
   useEffect(() => {
     const unsubAuth = auth.onAuthStateChanged((user) => {
-      setFirebaseUid(user?.uid ?? null);
+      const nextUid = user?.uid ?? null;
+      setFirebaseUid((prevUid) => {
+        if (prevUid !== nextUid) {
+          const snap = loadWorkspaceSnapshot(nextUid);
+          if (snap) {
+            setAccountBalance(snap.accountBalance ?? 101420.00);
+            setPositions(snap.positions ?? INITIAL_POSITIONS);
+            setPendingOrders(snap.pendingOrders ?? INITIAL_PENDING_ORDERS);
+            setOrderHistory(snap.orderHistory ?? INITIAL_HISTORY);
+            setLicenses(snap.licenses ?? INITIAL_LICENSES);
+            setConvertedEAs(snap.convertedEAs ?? INITIAL_CONVERTED_EAS);
+            setMobileActivations(snap.mobileActivations ?? INITIAL_MOBILE_ACTIVATIONS);
+            setAutomatedSettings(snap.automatedSettings ?? INITIAL_AUTOMATED_SETTINGS);
+          } else {
+            setAccountBalance(101420.00);
+            setPositions(INITIAL_POSITIONS);
+            setPendingOrders(INITIAL_PENDING_ORDERS);
+            setOrderHistory(INITIAL_HISTORY);
+            setLicenses(INITIAL_LICENSES);
+            setConvertedEAs(INITIAL_CONVERTED_EAS);
+            setMobileActivations(INITIAL_MOBILE_ACTIVATIONS);
+            setAutomatedSettings(INITIAL_AUTOMATED_SETTINGS);
+          }
+        }
+        return nextUid;
+      });
     });
     return () => unsubAuth();
   }, []);
@@ -1118,23 +1277,56 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       (snap) => {
         if (snap.exists()) {
           const data = snap.data();
-          skipNextRemoteWriteRef.current = true;
-          if (typeof data.accountBalance === 'number') setAccountBalance(data.accountBalance);
+          let nextBalance = accountBalance;
+          let nextPositions = positionsRef.current;
+          let nextPending = pendingOrdersRef.current;
+          let nextHistory = orderHistory;
+          let nextLicenses = licenses;
+          let nextAuto = automatedSettings;
+
+          if (typeof data.accountBalance === 'number') {
+            nextBalance = data.accountBalance;
+            setAccountBalance(nextBalance);
+          }
           if (typeof data.positionsJson === 'string') {
-            try { setPositions(JSON.parse(data.positionsJson)); } catch {}
+            try {
+              nextPositions = JSON.parse(data.positionsJson);
+              setPositions(nextPositions);
+            } catch {}
           }
           if (typeof data.pendingOrdersJson === 'string') {
-            try { setPendingOrders(JSON.parse(data.pendingOrdersJson)); } catch {}
+            try {
+              nextPending = JSON.parse(data.pendingOrdersJson);
+              setPendingOrders(nextPending);
+            } catch {}
           }
           if (typeof data.orderHistoryJson === 'string') {
-            try { setOrderHistory(JSON.parse(data.orderHistoryJson)); } catch {}
+            try {
+              nextHistory = JSON.parse(data.orderHistoryJson);
+              setOrderHistory(nextHistory);
+            } catch {}
           }
           if (typeof data.licensesJson === 'string') {
-            try { setLicenses(JSON.parse(data.licensesJson)); } catch {}
+            try {
+              nextLicenses = JSON.parse(data.licensesJson);
+              setLicenses(nextLicenses);
+            } catch {}
           }
           if (typeof data.automatedSettingsJson === 'string') {
-            try { setAutomatedSettings(JSON.parse(data.automatedSettingsJson)); } catch {}
+            try {
+              nextAuto = JSON.parse(data.automatedSettingsJson);
+              setAutomatedSettings(nextAuto);
+            } catch {}
           }
+
+          lastSyncedPayloadRef.current = JSON.stringify({
+            accountBalance: nextBalance,
+            positionsJson: JSON.stringify(nextPositions),
+            pendingOrdersJson: JSON.stringify(nextPending),
+            orderHistoryJson: JSON.stringify(nextHistory.slice(0, 100)),
+            licensesJson: JSON.stringify(nextLicenses),
+            automatedSettingsJson: JSON.stringify(nextAuto),
+          });
         }
       },
       (error) => {
@@ -1146,11 +1338,19 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   useEffect(() => {
     if (!firebaseUid) return;
-    if (skipNextRemoteWriteRef.current) {
-      skipNextRemoteWriteRef.current = false;
+    const serialized = JSON.stringify({
+      accountBalance,
+      positionsJson: JSON.stringify(positions),
+      pendingOrdersJson: JSON.stringify(pendingOrders),
+      orderHistoryJson: JSON.stringify(orderHistory.slice(0, 100)),
+      licensesJson: JSON.stringify(licenses),
+      automatedSettingsJson: JSON.stringify(automatedSettings),
+    });
+    if (serialized === lastSyncedPayloadRef.current) {
       return;
     }
     const timer = setTimeout(() => {
+      lastSyncedPayloadRef.current = serialized;
       const workspaceRef = doc(dbFirestore, 'users', firebaseUid, 'workspaces', 'default');
       setDoc(
         workspaceRef,
@@ -1202,67 +1402,232 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, []);
 
-  // Update open positions PnL and check Trailing Stops & TP/SL hits
+  // Update open positions PnL, trailing stops, and evaluate SL/TP auto-triggers cleanly
   useEffect(() => {
-    setPositions((prev) =>
-      prev.map((pos) => {
-        const currentMkt = prices[pos.symbol];
-        if (!currentMkt) return pos;
+    const activePositions = positionsRef.current;
+    if (activePositions.length === 0) return;
 
-        const currentPrice = pos.side === 'BUY' ? currentMkt.bid : currentMkt.ask;
-        let pips = 0;
-        let profit = 0;
+    const eurUsdRate = prices['EURUSD']?.bid || 1.0842;
+    const usdJpyRate = prices['USDJPY']?.bid || 153.42;
 
+    const computeProfitUsd = (symbol: string, delta: number, lots: number, markPrice: number): number => {
+      const upper = symbol.toUpperCase();
+      if (upper.startsWith('XAUUSD')) {
+        return delta * lots * 100;
+      }
+      if (upper.startsWith('XAGEUR')) {
+        // Silver contract 500 oz micro ECN converted from EUR to USD
+        return delta * lots * 500 * eurUsdRate;
+      }
+      if (upper.startsWith('US30') || upper.startsWith('NAS100') || upper.startsWith('SPX')) {
+        return delta * lots * 10;
+      }
+      if (upper.includes('BTC') || upper.includes('ETH')) {
+        return delta * lots;
+      }
+      if (upper.startsWith('USDZAR')) {
+        return markPrice > 0 ? (delta * lots * 100000) / markPrice : delta * lots * 5500;
+      }
+      if (upper.startsWith('USDJPY') || upper.includes('JPY')) {
+        return (delta * lots * 100000) / usdJpyRate;
+      }
+      return delta * lots * 100000;
+    };
+
+    const closedItems: OrderHistoryItem[] = [];
+    const newDecisionLogs: AutonomousDecisionLog[] = [];
+    let realizedDelta = 0;
+    const updatedPositions: Position[] = [];
+    const nowStamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const nowTimeStr = new Date().toLocaleTimeString();
+    const autoCfg = automatedSettingsRef.current;
+
+    for (const pos of activePositions) {
+      const currentMkt = resolveMarketPrice(prices, pos.symbol);
+      if (!currentMkt) {
+        updatedPositions.push(pos);
+        continue;
+      }
+
+      const currentPrice = pos.side === 'BUY' ? currentMkt.bid : currentMkt.ask;
+      const delta = pos.side === 'BUY' ? currentPrice - pos.openPrice : pos.openPrice - currentPrice;
+      const pips = delta / currentMkt.pipSize;
+      const profit = Number(computeProfitUsd(pos.symbol, delta, pos.lots, currentPrice).toFixed(2));
+
+      // Check SL / TP trigger first
+      const slHit =
+        pos.sl !== null &&
+        ((pos.side === 'BUY' && currentPrice <= pos.sl) || (pos.side === 'SELL' && currentPrice >= pos.sl));
+      const tpHit =
+        pos.tp !== null &&
+        ((pos.side === 'BUY' && currentPrice >= pos.tp) || (pos.side === 'SELL' && currentPrice <= pos.tp));
+
+      if (slHit || tpHit) {
+        realizedDelta += profit + pos.commission + pos.swap;
+        closedItems.push({
+          id: `hist-${Date.now()}-${pos.ticket}`,
+          ticket: pos.ticket,
+          symbol: pos.symbol,
+          side: pos.side,
+          orderType: 'MARKET',
+          lots: pos.lots,
+          openPrice: pos.openPrice,
+          closePrice: Number(currentPrice.toFixed(currentMkt.digits)),
+          sl: pos.sl,
+          tp: pos.tp,
+          profit,
+          pips: Number(pips.toFixed(1)),
+          commission: pos.commission,
+          swap: pos.swap,
+          openTime: pos.openTime,
+          closeTime: nowStamp,
+          latencyMs: bridgeLatencyRef.current || 1.4,
+          slippagePips: Number((currentMkt.spread * 0.1).toFixed(1)),
+          terminal: pos.terminal,
+          closeReason: slHit ? 'SL_HIT' : 'TP_HIT',
+        });
+        continue;
+      }
+
+      let nextLots = pos.lots;
+      let nextCommission = pos.commission;
+      let nextComment = pos.comment;
+      let nextTrailing = pos.isTrailing;
+      let nextTrailingDist = pos.trailingDistancePips;
+      let newSl = pos.sl;
+
+      if (autoCfg.masterAutoTrading) {
+        // 1. Auto Break-Even Lock
+        const beThreshold = Math.max(8, autoCfg.autoBreakEvenPips || 15);
+        const isLockedAboveEntry =
+          pos.sl !== null &&
+          (pos.side === 'BUY' ? pos.sl >= pos.openPrice : pos.sl <= pos.openPrice);
+
+        if (pips >= beThreshold && !isLockedAboveEntry) {
+          const lockOffset = 1.5 * currentMkt.pipSize;
+          newSl = Number(
+            (pos.side === 'BUY' ? pos.openPrice + lockOffset : pos.openPrice - lockOffset).toFixed(
+              currentMkt.digits
+            )
+          );
+          newDecisionLogs.push({
+            id: `dec-be-${Date.now()}-${pos.ticket}`,
+            timestamp: nowTimeStr,
+            bot: 'ProfitGuard Engine',
+            symbol: pos.symbol,
+            action: 'BREAK_EVEN',
+            price: Number(currentPrice.toFixed(currentMkt.digits)),
+            reason: `+${pips.toFixed(1)} pips reached BE target (${beThreshold}p)`,
+            protection: `SL locked at ${newSl.toFixed(currentMkt.digits)}`,
+            latencyMs: bridgeLatencyRef.current || 1.4,
+          });
+        }
+
+        // 2. Auto Partial Profit Harvesting (40% realization on runners at +26 pips)
+        if (pips >= 26 && nextLots >= 0.04 && !nextComment.includes('[LOCKED]')) {
+          const closeLots = Number(Math.max(0.01, nextLots * 0.4).toFixed(2));
+          const remainingLots = Number((nextLots - closeLots).toFixed(2));
+          if (remainingLots >= 0.01) {
+            const partialFraction = closeLots / nextLots;
+            const realizedPartialProfit = Number((profit * partialFraction).toFixed(2));
+            const partialComm = Number((nextCommission * partialFraction).toFixed(2));
+            const partialSwap = Number((pos.swap * partialFraction).toFixed(2));
+            realizedDelta += realizedPartialProfit + partialComm + partialSwap;
+
+            closedItems.push({
+              id: `hist-part-${Date.now()}-${pos.ticket}`,
+              ticket: pos.ticket + 100000,
+              symbol: pos.symbol,
+              side: pos.side,
+              orderType: 'MARKET',
+              lots: closeLots,
+              openPrice: pos.openPrice,
+              closePrice: Number(currentPrice.toFixed(currentMkt.digits)),
+              sl: newSl,
+              tp: pos.tp,
+              profit: realizedPartialProfit,
+              pips: Number(pips.toFixed(1)),
+              commission: partialComm,
+              swap: partialSwap,
+              openTime: pos.openTime,
+              closeTime: nowStamp,
+              latencyMs: bridgeLatencyRef.current || 1.4,
+              slippagePips: Number((currentMkt.spread * 0.1).toFixed(1)),
+              terminal: pos.terminal,
+              closeReason: 'MANUAL',
+            });
+
+            nextLots = remainingLots;
+            nextCommission = Number((nextCommission - partialComm).toFixed(2));
+            nextComment = `${nextComment} [LOCKED]`;
+            nextTrailing = true;
+            nextTrailingDist = nextTrailingDist || 12;
+
+            newDecisionLogs.push({
+              id: `dec-part-${Date.now()}-${pos.ticket}`,
+              timestamp: nowTimeStr,
+              bot: 'ProfitHarvest 40%',
+              symbol: pos.symbol,
+              action: 'PARTIAL_LOCK',
+              price: Number(currentPrice.toFixed(currentMkt.digits)),
+              reason: `Realized ${closeLots.toFixed(2)} lots (+$${realizedPartialProfit.toFixed(2)})`,
+              protection: `Runner trailing SL armed on ${remainingLots.toFixed(2)}L`,
+              latencyMs: bridgeLatencyRef.current || 1.4,
+            });
+          }
+        }
+
+        // 3. Auto Trailing Stop Arming on Runners
+        if (autoCfg.autoTrailingStopEnabled && pips >= 14 && !nextTrailing) {
+          nextTrailing = true;
+          nextTrailingDist = nextTrailingDist || 12;
+        }
+      }
+
+      // Trailing Stop update
+      if (nextTrailing) {
+        const distPips = nextTrailingDist || 12;
+        const trailDistance = distPips * currentMkt.pipSize;
         if (pos.side === 'BUY') {
-          pips = (currentPrice - pos.openPrice) / currentMkt.pipSize;
-          if (pos.symbol === 'XAUUSD') {
-            profit = (currentPrice - pos.openPrice) * pos.lots * 100;
-          } else if (pos.symbol === 'US30' || pos.symbol === 'NAS100') {
-            profit = (currentPrice - pos.openPrice) * pos.lots * 10;
-          } else if (pos.symbol.includes('BTC') || pos.symbol.includes('ETH')) {
-            profit = (currentPrice - pos.openPrice) * pos.lots;
-          } else {
-            profit = (currentPrice - pos.openPrice) * pos.lots * 100000;
+          const proposedSl = currentPrice - trailDistance;
+          if (newSl === null || proposedSl > newSl) {
+            newSl = Number(proposedSl.toFixed(currentMkt.digits));
           }
         } else {
-          pips = (pos.openPrice - currentPrice) / currentMkt.pipSize;
-          if (pos.symbol === 'XAUUSD') {
-            profit = (pos.openPrice - currentPrice) * pos.lots * 100;
-          } else if (pos.symbol === 'US30' || pos.symbol === 'NAS100') {
-            profit = (pos.openPrice - currentPrice) * pos.lots * 10;
-          } else if (pos.symbol.includes('BTC') || pos.symbol.includes('ETH')) {
-            profit = (pos.openPrice - currentPrice) * pos.lots;
-          } else {
-            profit = (pos.openPrice - currentPrice) * pos.lots * 100000;
+          const proposedSl = currentPrice + trailDistance;
+          if (newSl === null || proposedSl < newSl) {
+            newSl = Number(proposedSl.toFixed(currentMkt.digits));
           }
         }
+      }
 
-        // Trailing Stop logic
-        let newSl = pos.sl;
-        if (pos.isTrailing && pos.trailingDistancePips) {
-          const trailDistance = pos.trailingDistancePips * currentMkt.pipSize;
-          if (pos.side === 'BUY') {
-            const proposedSl = currentPrice - trailDistance;
-            if (newSl === null || proposedSl > newSl) {
-              newSl = Number(proposedSl.toFixed(currentMkt.digits));
-            }
-          } else {
-            const proposedSl = currentPrice + trailDistance;
-            if (newSl === null || proposedSl < newSl) {
-              newSl = Number(proposedSl.toFixed(currentMkt.digits));
-            }
-          }
-        }
+      const runnerDeltaProfit =
+        nextLots === pos.lots
+          ? profit
+          : Number(computeProfitUsd(pos.symbol, delta, nextLots, currentPrice).toFixed(2));
 
-        return {
-          ...pos,
-          currentPrice: Number(currentPrice.toFixed(currentMkt.digits)),
-          pips: Number(pips.toFixed(1)),
-          profit: Number(profit.toFixed(2)),
-          sl: newSl,
-        };
-      })
-    );
+      updatedPositions.push({
+        ...pos,
+        lots: nextLots,
+        commission: nextCommission,
+        comment: nextComment,
+        isTrailing: nextTrailing,
+        trailingDistancePips: nextTrailingDist,
+        currentPrice: Number(currentPrice.toFixed(currentMkt.digits)),
+        pips: Number(pips.toFixed(1)),
+        profit: runnerDeltaProfit,
+        sl: newSl,
+      });
+    }
+
+    setPositions(updatedPositions);
+    if (closedItems.length > 0) {
+      setOrderHistory((h) => [...closedItems, ...h]);
+      setAccountBalance((bal) => Number((bal + realizedDelta).toFixed(2)));
+    }
+    if (newDecisionLogs.length > 0) {
+      setAutonomousDecisions((prev) => [...newDecisionLogs, ...prev].slice(0, 60));
+    }
   }, [prices]);
 
   // Check pending orders for triggers (pure evaluation against pendingOrdersRef to avoid nested state updaters)
@@ -1337,8 +1702,19 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const unrealizedPnL = positions.reduce((acc, p) => acc + p.profit + p.commission + p.swap, 0);
   const accountEquity = Number((accountBalance + unrealizedPnL).toFixed(2));
   const usedMargin = positions.reduce((acc, p) => {
-    // Rough estimate: $1000 per lot on indices/metals, $500 on forex
-    const perLot = p.symbol === 'XAUUSD' ? 1000 : p.symbol === 'US30' ? 800 : 500;
+    const u = p.symbol.toUpperCase();
+    const perLot =
+      u.startsWith('XAUUSD')
+        ? 1000
+        : u.startsWith('US30') || u.startsWith('NAS100')
+        ? 800
+        : u.includes('BTC')
+        ? 1500
+        : u.includes('ETH')
+        ? 400
+        : u.startsWith('XAGEUR')
+        ? 300
+        : 500;
     return acc + p.lots * perLot;
   }, 0);
   const freeMargin = Math.max(0, accountEquity - usedMargin);
@@ -1374,11 +1750,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const executeOrder = useCallback(
     async (params: NewOrderParams) => {
       const tStart = performance.now();
-      const mkt = prices[params.symbol];
+      const mkt = resolveMarketPrice(pricesRef.current, params.symbol);
       if (!mkt) return { success: false, message: `Symbol ${params.symbol} not found.` };
       if (!params.lots || params.lots <= 0) return { success: false, message: 'Invalid lot size.' };
 
-      const chosenTerminal = params.terminal || terminals[0].name;
+      const chosenTerminal = params.terminal || terminalsRef.current[0]?.name || 'EmergeFX DXtrade';
       const fillPrice = params.side === 'BUY' ? mkt.ask : mkt.bid;
       let ticket = nextTicket();
 
@@ -1433,22 +1809,24 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
         setPositions((prev) => [newPos, ...prev]);
 
-        const newLog: WebhookLog = {
-          id: `log-${Date.now()}-${ticket}`,
-          timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-          source: 'Manual Bridge Terminal',
-          symbol: params.symbol,
-          action: params.side,
-          orderType: 'MARKET',
-          lots: params.lots,
-          sl: params.sl ?? null,
-          tp: params.tp ?? null,
-          status: 'SUCCESS',
-          executionTimeMs: elapsedMs,
-          payload: JSON.stringify({ action: params.side, symbol: params.symbol, lots: params.lots, sl: params.sl, tp: params.tp }),
-          targetTerminal: chosenTerminal,
-        };
-        setWebhookLogs((logs) => [newLog, ...logs]);
+        if (!params.skipWebhookLog) {
+          const newLog: WebhookLog = {
+            id: `log-${Date.now()}-${ticket}`,
+            timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+            source: 'Manual Bridge Terminal',
+            symbol: params.symbol,
+            action: params.side,
+            orderType: 'MARKET',
+            lots: params.lots,
+            sl: params.sl ?? null,
+            tp: params.tp ?? null,
+            status: 'SUCCESS',
+            executionTimeMs: elapsedMs,
+            payload: JSON.stringify({ action: params.side, symbol: params.symbol, lots: params.lots, sl: params.sl, tp: params.tp }),
+            targetTerminal: chosenTerminal,
+          };
+          setWebhookLogs((logs) => [newLog, ...logs]);
+        }
 
         void fetch('/api/db/record-execution', {
           method: 'POST',
@@ -1462,7 +1840,24 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
             pnl: 0,
             botSource: params.comment || 'MANUAL_BRIDGE',
           }),
-        }).catch(() => {});
+        }).catch((err: unknown) => {
+          console.warn('Trade execution DB log deferred:', err instanceof Error ? err.message : err);
+        });
+
+        const isBotOrSignal = Boolean(
+          params.comment &&
+            /(AI|Bot|EA|Auto|Signal|Webhook|Nexus|Liquidity|AlgoMax|EasyWay|TradePort)/i.test(
+              params.comment
+            )
+        );
+        speechNotifier.speak({
+          category: isBotOrSignal ? 'BOT_ENTRY' : 'SYSTEM',
+          severity: isBotOrSignal ? 'HIGH' : 'INFO',
+          title: `${isBotOrSignal ? 'Engine Trade Entry' : 'Order Filled'}: ${params.side} ${params.symbol}`,
+          message: `${isBotOrSignal ? 'Bot engine' : 'Bridge'} executed ${params.side} ${params.lots.toFixed(2)} lots on ${params.symbol} at ${fillPrice.toFixed(mkt.digits)}.`,
+          dedupeKey: `exec-${ticket}`,
+          cooldownMs: 2500,
+        });
 
         return { success: true, message: `Market Order #${ticket} Filled at ${fillPrice}`, ticket };
       } else {
@@ -1484,10 +1879,20 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         };
 
         setPendingOrders((prev) => [newPending, ...prev]);
+
+        speechNotifier.speak({
+          category: 'BOT_ENTRY',
+          severity: 'INFO',
+          title: `Pending ${params.orderType}: ${params.side} ${params.symbol}`,
+          message: `Armed ${params.side} ${params.orderType.toLowerCase()} on ${params.symbol} at ${targetPrice.toFixed(mkt.digits)}.`,
+          dedupeKey: `pending-${ticket}`,
+          cooldownMs: 2500,
+        });
+
         return { success: true, message: `${params.orderType} Order #${ticket} Placed at ${targetPrice.toFixed(mkt.digits)}`, ticket };
       }
     },
-    [prices, terminals]
+    []
   );
 
   // Execute Batch Orders (Multi-ticket simultaneously via /api/bridge/batch-order)
@@ -1495,12 +1900,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     async (params: BatchOrderParams) => {
       const tStart = performance.now();
       const count = Math.max(1, Math.min(20, params.count || 1));
-      const mkt = prices[params.symbol];
+      const mkt = resolveMarketPrice(pricesRef.current, params.symbol);
       if (!mkt) return { success: false, message: `Symbol ${params.symbol} not found in live feed.`, tickets: [] };
       if (!params.lots || params.lots <= 0) return { success: false, message: 'Invalid lot size.', tickets: [] };
 
       const fillPrice = params.side === 'BUY' ? mkt.ask : mkt.bid;
-      const chosenTerminal = params.terminal || terminals[0].name;
+      const chosenTerminal = params.terminal || terminalsRef.current[0]?.name || 'EmergeFX DXtrade';
       let serverTickets: number[] = [];
 
       try {
@@ -1580,13 +1985,22 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setPositions((prev) => [...newPositions, ...prev]);
       setWebhookLogs((logs) => [...newLogs, ...logs]);
 
+      speechNotifier.speak({
+        category: 'BOT_ENTRY',
+        severity: 'HIGH',
+        title: `Batch Dispatch: ${count}x ${params.side} ${params.symbol}`,
+        message: `Autonomous batch engine executed ${count} ${params.side} trades of ${params.lots.toFixed(2)} lots on ${params.symbol} at ${fillPrice.toFixed(mkt.digits)}.`,
+        dedupeKey: `batch-${params.symbol}-${params.side}`,
+        cooldownMs: 2500,
+      });
+
       return {
         success: true,
         message: `Successfully executed ${count} order${count > 1 ? 's' : ''} on ${params.symbol} (${params.side} ${params.lots} lots each)`,
         tickets,
       };
     },
-    [prices, terminals]
+    []
   );
 
   // Close Position (pure atomic state updates without nested setters)
@@ -1595,7 +2009,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const pos = positionsRef.current.find((p) => p.id === positionId);
       if (!pos) return;
 
-      const mkt = pricesRef.current[pos.symbol];
+      const mkt = resolveMarketPrice(pricesRef.current, pos.symbol);
       const closePrice = pos.side === 'BUY' ? (mkt ? mkt.bid : pos.currentPrice) : (mkt ? mkt.ask : pos.currentPrice);
       const slippage = mkt ? Number((mkt.spread * 0.1).toFixed(1)) : 0.1;
 
@@ -1642,7 +2056,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return;
       }
 
-      const mkt = pricesRef.current[pos.symbol];
+      const mkt = resolveMarketPrice(pricesRef.current, pos.symbol);
       const closePrice = pos.side === 'BUY' ? (mkt ? mkt.bid : pos.currentPrice) : (mkt ? mkt.ask : pos.currentPrice);
       const partialProfit = Number((pos.profit * (percent / 100)).toFixed(2));
       const partialCommission = Number((pos.commission * (percent / 100)).toFixed(2));
@@ -1701,7 +2115,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setPositions((prev) =>
         prev.map((pos) => {
           if (pos.id !== positionId) return pos;
-          const mkt = prices[pos.symbol];
+          const mkt = resolveMarketPrice(pricesRef.current, pos.symbol);
           const pipOffset = mkt ? mkt.pipSize : 0.0001;
           const breakEvenPrice = pos.side === 'BUY' ? pos.openPrice + pipOffset : pos.openPrice - pipOffset;
           return {
@@ -1711,7 +2125,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         })
       );
     },
-    [prices]
+    []
   );
 
   // Toggle Trailing Stop
@@ -1742,7 +2156,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (activePositions.length > 0) {
       let totalRealizedDelta = 0;
       const newHistoryItems: OrderHistoryItem[] = activePositions.map((pos, idx) => {
-        const mkt = pricesRef.current[pos.symbol];
+        const mkt = resolveMarketPrice(pricesRef.current, pos.symbol);
         const closePrice = pos.side === 'BUY' ? (mkt ? mkt.bid : pos.currentPrice) : (mkt ? mkt.ask : pos.currentPrice);
         const slippage = mkt ? Number((mkt.spread * 0.1).toFixed(1)) : 0.1;
         totalRealizedDelta += pos.profit + pos.commission + pos.swap;
@@ -1799,6 +2213,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
           sl,
           tp,
           comment: `Webhook_${source}`,
+          skipWebhookLog: true,
         });
 
         const execTime = Number(Math.max(0.3, performance.now() - tStart).toFixed(1));
@@ -1815,10 +2230,18 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
           status: 'SUCCESS',
           executionTimeMs: execTime,
           payload: payloadStr,
-          targetTerminal: terminals[0]?.name || 'EmergeFX DXtrade',
+          targetTerminal: terminalsRef.current[0]?.name || 'EmergeFX DXtrade',
         };
 
         setWebhookLogs((prev) => [newLog, ...prev]);
+        speechNotifier.speak({
+          category: 'SIGNAL_ALERT',
+          severity: 'HIGH',
+          title: `Webhook Signal: ${action} ${symbol}`,
+          message: `Incoming ${source} webhook triggered ${action} ${lots} lots on ${symbol}.`,
+          dedupeKey: `webhook-${symbol}-${action}`,
+          cooldownMs: 3000,
+        });
         return { success: true, message: `Bridge parsed & executed ${action} ${lots} lots on ${symbol}` };
       } catch (err: unknown) {
         const errorMsg = err instanceof Error ? err.message : 'Invalid JSON payload format';
@@ -1841,7 +2264,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return { success: false, message: errorMsg };
       }
     },
-    [executeOrder, terminals]
+    [executeOrder]
   );
 
   const clearWebhookLogs = useCallback(() => {
@@ -1946,7 +2369,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   const downloadPreset = useCallback((presetId: string) => {
-    const preset = presets.find((p) => p.id === presetId);
+    const preset = presetsRef.current.find((p) => p.id === presetId);
     if (!preset) return;
 
     const blob = new Blob([preset.content], { type: 'text/plain;charset=utf-8' });
@@ -1962,7 +2385,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setPresets((prev) =>
       prev.map((p) => (p.id === presetId ? { ...p, downloadCount: p.downloadCount + 1 } : p))
     );
-  }, [presets]);
+  }, []);
 
   // EA-Converter & Rebrand ("Rename") actions
   const updateBrandConfig = useCallback((newConfig: Partial<BrandConfig>) => {
@@ -2008,10 +2431,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       eaAssigned: string,
       deviceType: MobileActivation['deviceType']
     ): MobileActivation => {
-      const code = generateKeyCode(`EAC-${brandConfig.mentorId.replace('MTR-', '')}`, 1, 4);
+      const activeBrand = brandConfigRef.current;
+      const code = generateKeyCode(`EAC-${activeBrand.mentorId.replace('MTR-', '')}`, 1, 4);
       const newAct: MobileActivation = {
         id: `mob-${Date.now()}`,
-        mentorId: brandConfig.mentorId,
+        mentorId: activeBrand.mentorId,
         clientName,
         clientEmail,
         activationKey: `${code}-${clientName.substring(0, 4).toUpperCase()}`,
@@ -2028,7 +2452,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setMobileActivations((prev) => [newAct, ...prev]);
       return newAct;
     },
-    [brandConfig]
+    []
   );
 
   const revokeMobileActivation = useCallback((id: string) => {
@@ -2054,6 +2478,17 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       passwordMasked: string,
       accountType: MT5BrokerCredential['accountType']
     ) => {
+      const cleanBroker = brokerName.trim();
+      const cleanServer = server.trim();
+      const cleanLogin = login.trim();
+      const cleanPass = passwordMasked.trim();
+      if (!cleanBroker || !cleanServer || !cleanLogin || !cleanPass) {
+        return {
+          success: false,
+          message: 'Broker name, server host, MT5 login ID, and password are all required.',
+        };
+      }
+
       const tStart = performance.now();
       let verifiedPing = liveMarketData.lastRttMs || 1.8;
       let accountBalanceVal = accountType === 'PROP_FIRM' ? 100000 : accountType === 'LIVE' ? 50000 : 10000;
@@ -2062,22 +2497,35 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const res = await fetch('/api/mt5/verify-broker', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ brokerName, server, login, password: passwordMasked || 'token', accountType }),
+          body: JSON.stringify({
+            brokerName: cleanBroker,
+            server: cleanServer,
+            login: cleanLogin,
+            password: cleanPass,
+            accountType,
+          }),
         });
         verifiedPing = Number(Math.max(0.4, performance.now() - tStart).toFixed(1));
-        if (res.ok) {
-          const data = await res.json();
-          if (data?.details?.balance) accountBalanceVal = Number(data.details.balance);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          return {
+            success: false,
+            message: data?.message || `MT5 broker authentication failed (HTTP ${res.status}).`,
+          };
         }
-      } catch {
-        verifiedPing = Number(Math.max(0.5, performance.now() - tStart).toFixed(1));
+        if (data?.details?.balance) accountBalanceVal = Number(data.details.balance);
+      } catch (err: unknown) {
+        return {
+          success: false,
+          message: err instanceof Error ? `Bridge verification unreachable: ${err.message}` : 'MT5 broker verification failed.',
+        };
       }
 
       const newCred: MT5BrokerCredential = {
         id: `mt5-cred-${Date.now()}`,
-        brokerName,
-        server,
-        login,
+        brokerName: cleanBroker,
+        server: cleanServer,
+        login: cleanLogin,
         passwordMasked: '••••••••••••',
         accountType,
         connectedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
@@ -2094,11 +2542,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       const newTerm: TerminalInstance = {
         id: `term-mt5-${Date.now()}`,
-        name: `${brokerName} MT5 Live`,
+        name: `${cleanBroker} MT5 Live`,
         platform: 'MT5',
-        broker: brokerName,
-        accountNumber: login,
-        server,
+        broker: cleanBroker,
+        accountNumber: cleanLogin,
+        server: cleanServer,
         pingMs: verifiedPing,
         status: 'ONLINE',
         location: 'London Equinix LD4',
@@ -2115,7 +2563,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       return {
         success: true,
-        message: `Authenticated MT5 Account #${login} on ${server} (Measured RTT: ${verifiedPing}ms)`,
+        message: `Authenticated MT5 Account #${cleanLogin} on ${cleanServer} (Measured RTT: ${verifiedPing}ms)`,
         credential: newCred,
       };
     },
@@ -2141,71 +2589,268 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   const toggleMasterAutoTrading = useCallback(() => {
-    setAutomatedSettings((prev) => ({
-      ...prev,
-      masterAutoTrading: !prev.masterAutoTrading,
-    }));
+    setAutomatedSettings((prev) => {
+      const next = !prev.masterAutoTrading;
+      speechNotifier.speak({
+        category: 'BOT_ENTRY',
+        severity: 'HIGH',
+        title: next ? 'Master Auto-Pilot Armed' : 'Master Auto-Pilot Paused',
+        message: next
+          ? `Master autonomous MT5 trading engine armed with ${prev.activeEAsCount} expert advisors active.`
+          : 'Master autonomous MT5 trading engine paused.',
+        dedupeKey: `master-auto-${next}`,
+        cooldownMs: 1500,
+      });
+      return {
+        ...prev,
+        masterAutoTrading: next,
+      };
+    });
   }, []);
 
+  const runAutonomousCycle = useCallback(
+    async (forceExecute = false) => {
+      if (isScanningRef.current) return;
+      isScanningRef.current = true;
+      setIsAutonomousScanning(true);
+
+      const watchlist = ['XAUUSD', 'EURUSD', 'BTCUSD', 'US30', 'NAS100', 'GBPUSD'];
+      const cfg = automatedSettingsRef.current;
+
+      try {
+        const results = await Promise.all(
+          watchlist.map(async (sym) => {
+            const mkt = resolveMarketPrice(pricesRef.current, sym);
+            if (!mkt) return null;
+            try {
+              const res = await liveMarketData.fetchCandles(sym, '5M');
+              return analyzeLiveMarketStructure(sym, mkt, res.candles, cfg.spreadFilterMaxPips);
+            } catch {
+              return analyzeLiveMarketStructure(sym, mkt, [], cfg.spreadFilterMaxPips);
+            }
+          })
+        );
+
+        const nextSnaps: Record<string, AutonomousSymbolAnalysis> = {};
+        const validAnalyses: AutonomousSymbolAnalysis[] = [];
+        for (const item of results) {
+          if (item) {
+            nextSnaps[item.symbol] = item;
+            validAnalyses.push(item);
+          }
+        }
+
+        if (Object.keys(nextSnaps).length > 0) {
+          setAutonomousSnapshots((prev) => ({ ...prev, ...nextSnaps }));
+        }
+
+        if (cfg.masterAutoTrading || forceExecute) {
+          const openPos = positionsRef.current;
+          if (openPos.length < cfg.maxSimultaneousTrades) {
+            // Rank strongest actionable setup
+            const candidates = validAnalyses
+              .filter(
+                (a) =>
+                  a.action !== 'HOLD' &&
+                  a.spreadAllowed &&
+                  a.confidence >= (forceExecute ? 72 : 76)
+              )
+              .sort((a, b) => b.confidence - a.confidence);
+
+            const nowMs = Date.now();
+            const chosen = candidates.find((cand) => {
+              const alreadyOpen = openPos.some((p) => p.symbol === cand.symbol);
+              const lastTs = lastAutoTradeTimeRef.current[cand.symbol] || 0;
+              return !alreadyOpen && nowMs - lastTs > (forceExecute ? 10000 : 120000);
+            });
+
+            if (chosen && chosen.action !== 'HOLD') {
+              lastAutoTradeTimeRef.current[chosen.symbol] = nowMs;
+              const bal = accountBalanceRef.current || 100000;
+              const riskAmt = cfg.dynamicEquitySizing
+                ? bal * (cfg.riskPerTradePct / 100)
+                : 250;
+              const slDist = Math.abs(chosen.entryPrice - chosen.sl);
+              const rawLots = cfg.dynamicEquitySizing
+                ? Math.max(0.05, Math.min(2.5, riskAmt / Math.max(slDist * 100, 150)))
+                : 0.25;
+              const lots = Number(rawLots.toFixed(2));
+
+              const execRes = await executeOrder({
+                symbol: chosen.symbol,
+                orderType: 'MARKET',
+                side: chosen.action,
+                lots,
+                sl: chosen.sl,
+                tp: chosen.tp,
+                comment: `AutoQuant_LiveAI (${chosen.confidence}%)`,
+                skipWebhookLog: false,
+              });
+
+              const logEntry: AutonomousDecisionLog = {
+                id: `dec-exec-${nowMs}`,
+                timestamp: new Date().toLocaleTimeString(),
+                bot: 'Sovereign Quant AI',
+                symbol: chosen.symbol,
+                action: chosen.action,
+                price: chosen.entryPrice,
+                reason: chosen.reason,
+                protection: execRes.success
+                  ? `SL ${chosen.sl} | TP ${chosen.tp} (1:${chosen.riskReward})`
+                  : execRes.message,
+                latencyMs: bridgeLatencyRef.current || 1.6,
+              };
+              setAutonomousDecisions((prev) => [logEntry, ...prev].slice(0, 60));
+            }
+          }
+        }
+      } finally {
+        isScanningRef.current = false;
+        setIsAutonomousScanning(false);
+      }
+    },
+    [executeOrder]
+  );
+
+  // Automatic Continuous Quantitative Loop (Initial 2.5s warmup + every 20s)
+  useEffect(() => {
+    const initialTimer = setTimeout(() => {
+      void runAutonomousCycle(false);
+    }, 2500);
+    const interval = setInterval(() => {
+      void runAutonomousCycle(false);
+    }, 20000);
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+    };
+  }, [runAutonomousCycle]);
+
+  const contextValue = useMemo<TradingContextType>(
+    () => ({
+      prices,
+      positions,
+      pendingOrders,
+      orderHistory,
+      terminals,
+      webhookLogs,
+      robots,
+      signals,
+      challenge,
+      licenses,
+      presets,
+      convertedEAs,
+      mobileActivations,
+      brandConfig,
+      mt5Credentials,
+      automatedSettings,
+      isRealtimeFeedActive,
+      ticksPerSecond,
+      accountBalance,
+      accountEquity,
+      unrealizedPnL,
+      usedMargin,
+      freeMargin,
+      marginLevel,
+      bridgeLatencyMs,
+      isBridgeConnected,
+      executeOrder,
+      executeBatchOrders,
+      closePosition,
+      partialClosePosition,
+      modifyPositionSLTP,
+      setBreakEven,
+      toggleTrailingStop,
+      cancelPendingOrder,
+      executeKillSwitch,
+      processWebhookPayload,
+      clearWebhookLogs,
+      toggleTerminalAutoTrading,
+      updateTerminalMultiplier,
+      resetChallenge,
+      simulatePropPass,
+      generateLicense,
+      revokeLicense,
+      downloadPreset,
+      updateBrandConfig,
+      convertEACode,
+      issueMobileActivation,
+      revokeMobileActivation,
+      toggleMobileActivationStatus,
+      connectMT5Broker,
+      disconnectMT5Broker,
+      setPrimaryMT5Broker,
+      updateAutomatedSettings,
+      toggleMasterAutoTrading,
+      autonomousSnapshots,
+      autonomousDecisions,
+      isAutonomousScanning,
+      runAutonomousCycle,
+    }),
+    [
+      prices,
+      positions,
+      pendingOrders,
+      orderHistory,
+      terminals,
+      webhookLogs,
+      robots,
+      signals,
+      challenge,
+      licenses,
+      presets,
+      convertedEAs,
+      mobileActivations,
+      brandConfig,
+      mt5Credentials,
+      automatedSettings,
+      isRealtimeFeedActive,
+      ticksPerSecond,
+      accountBalance,
+      accountEquity,
+      unrealizedPnL,
+      usedMargin,
+      freeMargin,
+      marginLevel,
+      bridgeLatencyMs,
+      isBridgeConnected,
+      executeOrder,
+      executeBatchOrders,
+      closePosition,
+      partialClosePosition,
+      modifyPositionSLTP,
+      setBreakEven,
+      toggleTrailingStop,
+      cancelPendingOrder,
+      executeKillSwitch,
+      processWebhookPayload,
+      clearWebhookLogs,
+      toggleTerminalAutoTrading,
+      updateTerminalMultiplier,
+      resetChallenge,
+      simulatePropPass,
+      generateLicense,
+      revokeLicense,
+      downloadPreset,
+      updateBrandConfig,
+      convertEACode,
+      issueMobileActivation,
+      revokeMobileActivation,
+      toggleMobileActivationStatus,
+      connectMT5Broker,
+      disconnectMT5Broker,
+      setPrimaryMT5Broker,
+      updateAutomatedSettings,
+      toggleMasterAutoTrading,
+      autonomousSnapshots,
+      autonomousDecisions,
+      isAutonomousScanning,
+      runAutonomousCycle,
+    ]
+  );
+
   return (
-    <TradingContext.Provider
-      value={{
-        prices,
-        positions,
-        pendingOrders,
-        orderHistory,
-        terminals,
-        webhookLogs,
-        robots,
-        signals,
-        challenge,
-        licenses,
-        presets,
-        convertedEAs,
-        mobileActivations,
-        brandConfig,
-        mt5Credentials,
-        automatedSettings,
-        isRealtimeFeedActive,
-        ticksPerSecond,
-        accountBalance,
-        accountEquity,
-        unrealizedPnL,
-        usedMargin,
-        freeMargin,
-        marginLevel,
-        bridgeLatencyMs,
-        isBridgeConnected,
-        executeOrder,
-        executeBatchOrders,
-        closePosition,
-        partialClosePosition,
-        modifyPositionSLTP,
-        setBreakEven,
-        toggleTrailingStop,
-        cancelPendingOrder,
-        executeKillSwitch,
-        processWebhookPayload,
-        clearWebhookLogs,
-        toggleTerminalAutoTrading,
-        updateTerminalMultiplier,
-        resetChallenge,
-        simulatePropPass,
-        generateLicense,
-        revokeLicense,
-        downloadPreset,
-        updateBrandConfig,
-        convertEACode,
-        issueMobileActivation,
-        revokeMobileActivation,
-        toggleMobileActivationStatus,
-        connectMT5Broker,
-        disconnectMT5Broker,
-        setPrimaryMT5Broker,
-        updateAutomatedSettings,
-        toggleMasterAutoTrading,
-      }}
-    >
+    <TradingContext.Provider value={contextValue}>
       {children}
     </TradingContext.Provider>
   );

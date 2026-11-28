@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTrading } from '../../context/TradingContext';
+import { useBrand } from '../../context/BrandContext';
 import { ConvertedEA, MobileActivation } from '../../types/trading';
 import {
   Smartphone,
@@ -31,7 +32,10 @@ import {
   Palette,
 } from 'lucide-react';
 
-export const EAConverterAdminView: React.FC = () => {
+export const EAConverterAdminView: React.FC<{ onOpenMobileLauncher?: () => void }> = ({
+  onOpenMobileLauncher,
+}) => {
+  const { brand } = useBrand();
   const {
     convertedEAs,
     mobileActivations,
@@ -72,11 +76,11 @@ export const EAConverterAdminView: React.FC = () => {
   const [targetFormat, setTargetFormat] = useState<ConvertedEA['targetFormat']>('MOBILE_CLOUD_ENGINE');
   const [codeSnippet, setCodeSnippet] = useState<string>(
 `//+------------------------------------------------------------------+
-//| EasyWay2Trade • Endgame HFT Algorithmic Engine                    |
-//| Converted for Mobile Cloud Execution (No VPS Needed)              |
+//| APEX SOVEREIGN • Endgame HFT Algorithmic Engine                  |
+//| Converted for Mobile Cloud Execution (No VPS Needed)             |
 //+------------------------------------------------------------------+
-#property copyright "EasyWay2Trade / AlgoTrade Matrix"
-#property link      "https://ea-converter.com"
+#property copyright "Myeni Quantitative Capital (Pty) Ltd"
+#property link      "https://apexsovereign.io"
 #property version   "4.21"
 
 input double InpRiskPercent = 1.0;     // Risk Percentage per trade
@@ -153,7 +157,7 @@ void OnTick() {
   };
 
   const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
+    void navigator.clipboard?.writeText(text).catch(() => undefined);
     setCopiedKey(text);
     const t = window.setTimeout(() => setCopiedKey(null), 2000);
     timersRef.current.push(t);
@@ -194,33 +198,44 @@ void OnTick() {
       </div>
 
       {/* Top Banner & Rename / Rebrand Indicator */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[#0d1627] via-[#09111e] to-[#17102b] border border-cyan-800/40 p-6 md:p-8 shadow-2xl">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative rounded-2xl overflow-hidden bg-[#0F141E] border border-white/[0.08] p-6 md:p-8 shadow-xl">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="max-w-3xl space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-mono font-medium">
+            <div className="flex items-center gap-2 text-cyan-300 text-xs font-mono font-medium">
               <Smartphone className="w-3.5 h-3.5 text-cyan-400" />
-              <span>{brandConfig.brandName} • Admin Control Center</span>
+              <span>{brand.brandName} · {brand.ownerEntity} Admin Center</span>
             </div>
-            <h2 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
+            <h2 className="text-2xl md:text-3xl font-bold text-white font-display tracking-tight">
               {brandConfig.brandName} Mobile Admin Suite
             </h2>
             <p className="text-sm text-slate-300 leading-relaxed">
-              {brandConfig.tagline}. Run desktop MetaTrader EAs (.ex4/.ex5) on your clients' iPhones and Android devices with zero local VPS required. Issue mobile license keys and manage your trading community under your own brand.
+              {brandConfig.tagline}. Principal Owner: {brand.ownerName}. Run desktop MetaTrader EAs (.ex4/.ex5) on mobile terminals with full proprietary licensing and IP control.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {onOpenMobileLauncher && (
+              <button
+                type="button"
+                onClick={onOpenMobileLauncher}
+                className="px-4 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs rounded-xl transition flex items-center gap-1.5"
+              >
+                <Smartphone className="w-4 h-4" />
+                <span>Open Mobile EA Deck</span>
+              </button>
+            )}
             <button
+              type="button"
               onClick={() => setAdminTab('RENAME_BRAND')}
-              className="px-4 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-slate-950 font-bold text-xs font-mono rounded-xl transition shadow-lg shadow-cyan-950/40 flex items-center gap-1.5"
+              className="px-4 py-2.5 bg-[#141B29] hover:bg-slate-800 text-slate-100 font-semibold text-xs rounded-xl border border-white/[0.08] transition flex items-center gap-1.5"
             >
-              <Edit3 className="w-4 h-4" />
-              <span>Rename & Rebrand Platform</span>
+              <Edit3 className="w-4 h-4 text-cyan-400" />
+              <span>Rename & Rebrand</span>
             </button>
             <button
+              type="button"
               onClick={() => setAdminTab('CONVERTER_STUDIO')}
-              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-mono font-semibold transition flex items-center gap-1.5"
+              className="px-4 py-2.5 bg-[#141B29] hover:bg-slate-800 text-slate-200 border border-white/[0.08] rounded-xl text-xs font-semibold transition flex items-center gap-1.5"
             >
               <Code className="w-4 h-4" />
               <span>Convert New EA</span>
@@ -323,7 +338,7 @@ void OnTick() {
             <div className="p-4 bg-[#0e121a] border border-slate-800 rounded-2xl space-y-1">
               <div className="text-slate-400 text-[11px] flex items-center justify-between">
                 <span>Push Gateway Status</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
               </div>
               <div className="text-2xl font-bold text-slate-100 mt-1">APNs / FCM</div>
               <div className="text-[10px] text-emerald-400">
@@ -509,7 +524,7 @@ void OnTick() {
                   required
                   value={customDomain}
                   onChange={(e) => setCustomDomain(e.target.value)}
-                  placeholder="e.g. ea-converter.com or mydomain.com"
+                  placeholder="e.g. apexsovereign.io or mydomain.com"
                   className="w-full bg-[#121622] border border-slate-700 rounded-xl px-3.5 py-2 text-slate-100 focus:outline-none focus:border-cyan-400 text-xs"
                 />
               </div>
@@ -565,7 +580,7 @@ void OnTick() {
               Live Client Mobile App Interface Preview (White-Labeled)
             </h4>
 
-            <div className="max-w-xs mx-auto bg-[#080c14] border-4 border-slate-700 rounded-3xl p-4 shadow-2xl space-y-3">
+            <div className="max-w-xs mx-auto bg-[#090C12] border-2 border-slate-700 rounded-2xl p-4 shadow-2xl space-y-3">
               <div className="w-16 h-1 bg-slate-700 rounded-full mx-auto mb-2" />
               <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-[10px]">
                 <div className="flex items-center gap-1.5">
@@ -583,8 +598,9 @@ void OnTick() {
                 <div className="text-[9px] text-slate-400">ID: {mentorId}</div>
               </div>
 
-              <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-[10px] text-emerald-300 text-center">
-                ✓ Cloud Trading Connected • 0 VPS Needed
+              <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-[10px] text-emerald-300 text-center flex items-center justify-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Cloud Trading Connected · 0 VPS Needed</span>
               </div>
             </div>
           </div>
@@ -881,7 +897,7 @@ void OnTick() {
                   rows={9}
                   value={codeSnippet}
                   onChange={(e) => setCodeSnippet(e.target.value)}
-                  className="w-full bg-[#0a0d14] border border-slate-700 rounded-xl p-3 text-cyan-300 text-[11px] font-mono focus:outline-none focus:border-cyan-400"
+                  className="w-full bg-[#090C12] border border-slate-700 rounded-xl p-3 text-cyan-300 text-[11px] font-mono focus:outline-none focus:border-cyan-400"
                 />
               </div>
 

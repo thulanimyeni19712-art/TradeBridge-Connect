@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useTrading } from '../../context/TradingContext';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useTrading, resolveMarketPrice } from '../../context/TradingContext';
+import { useBrand } from '../../context/BrandContext';
 import { liveMarketData } from '../../services/liveMarketData';
 import { Position, OrderSide, OrderType } from '../../types/trading';
 import { LiveTradingChart } from './LiveTradingChart';
 import { EditPositionModal } from './EditPositionModal';
 import { PartialCloseModal, KillSwitchModal } from './PartialCloseModal';
+import { MarketSentimentGauge } from './MarketSentimentGauge';
 import { AviatorPerformanceHUD } from '../aviator/AviatorPerformanceHUD';
 import {
   Zap,
@@ -51,6 +53,10 @@ import {
   Crosshair,
   Compass,
   Smartphone,
+  Calendar,
+  ScanLine,
+  GitMerge,
+  Power,
 } from 'lucide-react';
 
 // Sub-views for individual lenses
@@ -65,27 +71,52 @@ import { EasyWay2TradeView } from '../easyway2trade/EasyWay2TradeView';
 import { EmergePropView } from '../emerge/EmergePropView';
 import { EAMigrateProView } from '../eamigrate/EAMigrateProView';
 import { TradePortEAView } from '../tradeport/TradePortEAView';
+import { EAMatrixView } from '../eamatrix/EAMatrixView';
+import { AlgoHostView } from '../algohost/AlgoHostView';
+import { EAVaultView } from '../eavault/EAVaultView';
+import { EACentralView } from '../eacentral/EACentralView';
+import { ITradeBotView } from '../itradebot/ITradeBotView';
+import { EAMergeView } from '../eamerge/EAMergeView';
 import { GoogleDriveIntegrationCard } from '../picker/GoogleDriveIntegrationCard';
 import { GooglePickerButton } from '../picker/GooglePickerButton';
 
 export type OmniLensMode =
   | 'ALL_IN_ONE'
   | 'LIVE_EXECUTION'
+  | 'EA_MERGE'
   | 'NEXUS_AVIATOR'
   | 'ALGOMAX_PROP'
   | 'ALGOADMIN_FLEET'
   | 'LIQUIDITY_MAP'
   | 'SCRIPTS_SIGNALS'
   | 'EA_MIGRATE'
-  | 'TRADEPORT';
+  | 'EA_MATRIX'
+  | 'ALGO_HOST'
+  | 'EA_CENTRAL'
+  | 'EA_VAULT'
+  | 'TRADEPORT'
+  | 'I_TRADE_BOT';
 
 interface UnifiedOmniTradeBridgeViewProps {
   onOpenOrderModal: (symbol?: string, side?: OrderSide) => void;
+  onOpenWorkspaceHub?: () => void;
+  onOpenAIScanner?: () => void;
+  activeSymbol?: string;
+  onSymbolChange?: (symbol: string) => void;
+  displayCurrency?: 'USD' | 'ZAR';
+  onCurrencyChange?: (currency: 'USD' | 'ZAR') => void;
 }
 
 export const UnifiedOmniTradeBridgeView: React.FC<UnifiedOmniTradeBridgeViewProps> = ({
   onOpenOrderModal,
+  onOpenWorkspaceHub,
+  onOpenAIScanner,
+  activeSymbol,
+  onSymbolChange,
+  displayCurrency,
+  onCurrencyChange,
 }) => {
+  const { brand, accent } = useBrand();
   const {
     prices,
     positions,
@@ -94,34 +125,46 @@ export const UnifiedOmniTradeBridgeView: React.FC<UnifiedOmniTradeBridgeViewProp
     webhookLogs,
     terminals,
     robots,
+    signals,
+    automatedSettings,
+    ticksPerSecond,
     accountBalance,
     accountEquity,
     unrealizedPnL,
-    usedMargin,
-    freeMargin,
-    marginLevel,
     bridgeLatencyMs,
     closePosition,
     partialClosePosition,
-    modifyPositionSLTP,
     setBreakEven,
-    toggleTrailingStop,
     cancelPendingOrder,
     executeKillSwitch,
     executeOrder,
     executeBatchOrders,
     processWebhookPayload,
     clearWebhookLogs,
+    toggleMasterAutoTrading,
+    autonomousSnapshots,
+    isAutonomousScanning,
+    runAutonomousCycle,
   } = useTrading();
 
   // Active lens mode: ALL_IN_ONE combines all modules in one single bridge
   const [lensMode, setLensMode] = useState<OmniLensMode>('ALL_IN_ONE');
 
-  // Charted symbol state
-  const [chartedSymbol, setChartedSymbol] = useState<string>('XAUUSD');
+  // Charted symbol state synced with App workspace state
+  const [localSymbol, setLocalSymbol] = useState<string>(activeSymbol || 'XAUUSD');
+  const chartedSymbol = activeSymbol || localSymbol;
+  const setChartedSymbol = (sym: string) => {
+    setLocalSymbol(sym);
+    onSymbolChange?.(sym);
+  };
 
-  // Currency Display Mode: USD or ZAR (live USDZAR feed)
-  const [currencyMode, setCurrencyMode] = useState<'USD' | 'ZAR'>('USD');
+  // Currency Display Mode synced with App workspace state
+  const [localCurrency, setLocalCurrency] = useState<'USD' | 'ZAR'>(displayCurrency || 'USD');
+  const currencyMode = displayCurrency || localCurrency;
+  const setCurrencyMode = (cur: 'USD' | 'ZAR') => {
+    setLocalCurrency(cur);
+    onCurrencyChange?.(cur);
+  };
   const zarRate = prices['USDZAR']?.bid || liveMarketData.usdZarRate || 18.25;
 
   // Active bottom book tab in the bridge
@@ -146,46 +189,92 @@ export const UnifiedOmniTradeBridgeView: React.FC<UnifiedOmniTradeBridgeViewProp
   const nexusZarEquity = accountEquity * zarRate;
   const nexusZarProfit = unrealizedPnL * zarRate;
 
-  // Dynamic news countdown (BOE Rate Decision)
-  const [boeHours, setBoeHours] = useState<number>(20);
-  const [boeMinutes, setBoeMinutes] = useState<number>(42);
-  const [boeSeconds, setBoeSeconds] = useState<number>(15);
+  // Real-time UTC clock for institutional session status & catalyst countdown
+  const [nowUtc, setNowUtc] = useState<Date>(() => new Date());
+  const timersRef = useRef<number[]>([]);
 
-  // Countdown timer for catalyst schedule
   useEffect(() => {
     const interval = setInterval(() => {
-      setBoeSeconds((prev) => {
-        if (prev > 0) return prev - 1;
-        setBoeMinutes((m) => {
-          if (m > 0) return m - 1;
-          setBoeHours((h) => (h > 0 ? h - 1 : 23));
-          return 59;
-        });
-        return 59;
-      });
+      setNowUtc(new Date());
     }, 1000);
-
-    return () => clearInterval(interval);
+    const timers = timersRef.current;
+    return () => {
+      clearInterval(interval);
+      timers.forEach((id) => window.clearTimeout(id));
+    };
   }, []);
 
-  // Format currency based on USD / ZAR
-  const formatMoney = (valUsd: number) => {
-    if (currencyMode === 'ZAR') {
-      const zarVal = valUsd * zarRate;
-      return `R ${zarVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    }
-    return `$${valUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const scheduleNoticeClear = (setter: React.Dispatch<React.SetStateAction<string | null>>, ms = 3500) => {
+    const id = window.setTimeout(() => setter(null), ms);
+    timersRef.current.push(id);
   };
 
-  // One-click quick market execution
+  // Compute real UTC institutional session state & next catalyst transition
+  const sessionSchedule = useMemo(() => {
+    const day = nowUtc.getUTCDay();
+    const totalSecUtc =
+      nowUtc.getUTCHours() * 3600 + nowUtc.getUTCMinutes() * 60 + nowUtc.getUTCSeconds();
+    const isWeekend = day === 6 || (day === 0 && totalSecUtc < 22 * 3600);
+
+    const minsUtc = Math.floor(totalSecUtc / 60);
+    const londonOpen = !isWeekend && minsUtc >= 7 * 60 && minsUtc < 16 * 60;
+    const nyOpen = !isWeekend && minsUtc >= 12 * 60 && minsUtc < 21 * 60;
+    const tokyoOpen = !isWeekend && minsUtc >= 0 && minsUtc < 9 * 60;
+    const overlapPeak = londonOpen && nyOpen;
+
+    const milestones = [
+      { sec: 0, label: 'Tokyo Open (00:00 UTC)' },
+      { sec: 7 * 3600, label: 'London LD4 Open (07:00 UTC)' },
+      { sec: 12 * 3600, label: 'LDN/NY Killzone (12:00 UTC)' },
+      { sec: 16 * 3600, label: 'London Fix (16:00 UTC)' },
+      { sec: 21 * 3600, label: 'NY Cash Close (21:00 UTC)' },
+    ];
+    let next = milestones.find((m) => m.sec > totalSecUtc);
+    let secsRemaining = next ? next.sec - totalSecUtc : 24 * 3600 - totalSecUtc;
+    if (!next) {
+      next = milestones[0];
+    }
+    const hrs = Math.floor(secsRemaining / 3600);
+    const mins = Math.floor((secsRemaining % 3600) / 60);
+    const secs = secsRemaining % 60;
+
+    return {
+      isWeekend,
+      londonOpen,
+      nyOpen,
+      tokyoOpen,
+      overlapPeak,
+      nextLabel: next.label,
+      countdownText: `${hrs}h ${String(mins).padStart(2, '0')}m ${String(secs).padStart(2, '0')}s`,
+    };
+  }, [nowUtc]);
+
+  // Format currency based on USD / ZAR cleanly preserving negative sign before currency symbol
+  const formatMoney = (valUsd: number, showPlus = false) => {
+    const sign = valUsd < 0 ? '-' : showPlus && valUsd > 0 ? '+' : '';
+    const absUsd = Math.abs(valUsd);
+    if (currencyMode === 'ZAR') {
+      const zarVal = absUsd * zarRate;
+      return `${sign}R ${zarVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    return `${sign}$${absUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  // One-click quick market execution with symbol-accurate pipSize & digits
   const handleQuickMarketOrder = async (side: OrderSide, symbolOverride?: string) => {
     const targetSymbol = symbolOverride || chartedSymbol;
+    const market = resolveMarketPrice(prices, targetSymbol);
+    if (!market) {
+      setQuickOrderNotice(`Awaiting live quote for ${targetSymbol}`);
+      return;
+    }
     setIsPlacingQuickOrder(true);
     try {
-      const currentPrice = prices[targetSymbol]?.bid || 2650.0;
-      const isMetalOrCrypto = targetSymbol.includes('XAU') || targetSymbol.includes('BTC');
-      const slDist = isMetalOrCrypto ? 8.0 : 0.003;
-      const tpDist = isMetalOrCrypto ? 16.0 : 0.006;
+      const currentPrice = side === 'BUY' ? market.ask : market.bid;
+      const pipSize = market.pipSize || 0.0001;
+      const digits = market.digits ?? 2;
+      const slDist = pipSize * 50;
+      const tpDist = pipSize * 100;
 
       const sl = side === 'BUY' ? currentPrice - slDist : currentPrice + slDist;
       const tp = side === 'BUY' ? currentPrice + tpDist : currentPrice - tpDist;
@@ -195,37 +284,47 @@ export const UnifiedOmniTradeBridgeView: React.FC<UnifiedOmniTradeBridgeViewProp
         orderType: 'MARKET',
         side,
         lots: quickLots,
-        sl: parseFloat(sl.toFixed(isMetalOrCrypto ? 2 : 4)),
-        tp: parseFloat(tp.toFixed(isMetalOrCrypto ? 2 : 4)),
+        sl: Number(sl.toFixed(digits)),
+        tp: Number(tp.toFixed(digits)),
         comment: `OmniBridge_${side}_${quickLots}`,
       });
 
-      setQuickOrderNotice(`✓ Executed ${side} ${quickLots} lots on ${targetSymbol}`);
-      setTimeout(() => setQuickOrderNotice(null), 3500);
+      setQuickOrderNotice(`Executed ${side} ${quickLots} lots on ${targetSymbol}`);
+      scheduleNoticeClear(setQuickOrderNotice, 3500);
     } catch {
-      setQuickOrderNotice(`Failed to place order`);
+      setQuickOrderNotice('Failed to place order');
     } finally {
       setIsPlacingQuickOrder(false);
     }
   };
 
-  // Nexus simultaneous 3-trades batch execution
+  // Nexus simultaneous 3-trades batch execution with symbol-accurate pipSize & digits
   const handleExecuteNexusBatch = async (side: OrderSide) => {
+    const market = resolveMarketPrice(prices, chartedSymbol);
+    if (!market) {
+      setBatchNotice(`Awaiting live quote for ${chartedSymbol}`);
+      return;
+    }
     setIsBatchExecuting(true);
     try {
-      const currentPrice = prices[chartedSymbol]?.bid || 2650.0;
+      const currentPrice = side === 'BUY' ? market.ask : market.bid;
+      const pipSize = market.pipSize || 0.0001;
+      const digits = market.digits ?? 2;
+      const slDist = pipSize * 45;
+      const tpDist = pipSize * 110;
+
       await executeBatchOrders({
         symbol: chartedSymbol,
         side,
         lots: quickLots,
         count: 3,
-        sl: side === 'BUY' ? currentPrice - 6.0 : currentPrice + 6.0,
-        tp: side === 'BUY' ? currentPrice + 16.0 : currentPrice - 16.0,
+        sl: Number((side === 'BUY' ? currentPrice - slDist : currentPrice + slDist).toFixed(digits)),
+        tp: Number((side === 'BUY' ? currentPrice + tpDist : currentPrice - tpDist).toFixed(digits)),
         comment: 'Nexus2_Batch_3x',
       });
 
-      setBatchNotice(`⚡ 3-Ticket Batch Dispatched: ${side} 3x${quickLots} lots on ${chartedSymbol}`);
-      setTimeout(() => setBatchNotice(null), 4000);
+      setBatchNotice(`3-Ticket Batch Dispatched: ${side} 3x${quickLots} lots on ${chartedSymbol}`);
+      scheduleNoticeClear(setBatchNotice, 4000);
     } catch {
       setBatchNotice('Batch execution failed');
     } finally {
@@ -235,17 +334,17 @@ export const UnifiedOmniTradeBridgeView: React.FC<UnifiedOmniTradeBridgeViewProp
 
   // Download real MQL5 Expert Advisor file
   const handleDownloadBridgeEA = () => {
+    const bridgeEndpoint =
+      typeof window !== 'undefined' ? `${window.location.origin}/api/mt5/bridge` : 'http://localhost:3000/api/mt5/bridge';
     const code = `//+------------------------------------------------------------------+
 //|                             Titan_Unified_OmniTrade_Bridge.mq5   |
 //|               Copyright 2026, AlgoTrade Matrix & AlgoMax EA v5.2 |
-//|                             https://algotradematrix.io           |
 //+------------------------------------------------------------------+
 #property copyright "Titan Quant Matrix Ecosystem"
-#property link      "https://algotradematrix.io"
 #property version   "5.20"
 #property strict
 
-input string InpBridgeServer = "https://YOUR_APP_URL/api/mt5/bridge";
+input string InpBridgeServer = "${bridgeEndpoint}";
 input string InpLicenseKey   = "AMX-INST-9821-X99";
 input string InpHWID         = "HWID-8829-0192-EF91";
 input double InpDefaultLots  = 0.05;
@@ -280,7 +379,7 @@ void OnTick() {
   // Connected Bot Fleet status derived from live TradingContext robots & execution metrics
   const connectedBots = useMemo(() => {
     if (robots && robots.length > 0) {
-      const colors = ['cyan', 'amber', 'emerald', 'blue', 'purple', 'rose'];
+      const colors = ['cyan', 'amber', 'emerald', 'blue', 'sky', 'rose'];
       return robots.map((bot, idx) => ({
         name: bot.name,
         type: `${bot.category} (${bot.timeframe})`,
@@ -308,84 +407,71 @@ void OnTick() {
   return (
     <div className="space-y-4">
       {/* =========================================================================
-          TOP OMNI-BRIDGE COCKPIT: Fleet KPI Telemetry & Dual-Currency Ribbon
+          TOP OMNI-BRIDGE COCKPIT: Fleet Telemetry & Unified Segmented Controls
           ========================================================================= */}
-      <div className="relative rounded-2xl bg-gradient-to-r from-[#070b14] via-[#090f1d] to-[#070b14] border border-cyan-500/25 p-3.5 sm:p-5 shadow-[0_0_40px_rgba(6,182,212,0.12)] overflow-hidden">
-        {/* Glow grid background */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-cyan-900/20 via-transparent to-transparent pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="rounded-2xl glass-ultra border border-white/[0.12] p-4 sm:p-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           {/* Left: Brand Identity & Unified Status */}
           <div className="flex items-center gap-3">
-            <div className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 via-teal-500 to-emerald-500 p-[2px] shadow-lg shadow-cyan-500/30">
-              <div className="w-full h-full bg-[#050913] rounded-[10px] flex items-center justify-center text-cyan-400">
-                <Layers className="w-6 h-6 animate-pulse" />
-              </div>
-              <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-[#050913]" />
-              </span>
+            <div className="relative w-11 h-11 rounded-xl bg-[#141B29] border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
+              <Layers className="w-5 h-5" />
+              <span className="absolute -bottom-1 -right-1 inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400 border-2 border-[#0F141E]" />
             </div>
 
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg sm:text-xl font-extrabold text-white font-orbitron tracking-wide">
-                  TITAN <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-teal-300 to-emerald-400">OMNI-TRADE BRIDGE</span>
-                </h1>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 uppercase tracking-wider">
-                  ALL-IN-ONE
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 flex items-center gap-2 flex-wrap tabular-nums">
-                <span>Unified Multi-Bot Matrix</span>
-                <span className="text-slate-600">•</span>
+              <h1 className="text-lg sm:text-xl font-bold text-white font-display tracking-tight">
+                {brand.brandName} <span className={accent.textClass}>Omni-Trade Bridge</span>
+              </h1>
+              <p className="text-xs text-slate-400 flex items-center gap-2 flex-wrap font-mono tabular-nums mt-0.5">
                 <span className="text-emerald-400 flex items-center gap-1 font-semibold">
                   <Activity className="w-3 h-3" /> {terminals.filter((t) => t.status === 'ONLINE').length} / {terminals.length} Terminals Online
                 </span>
-                <span className="text-slate-600">•</span>
-                <span className="text-cyan-300">Tick Latency: {bridgeLatencyMs.toFixed(1)}ms</span>
+                <span className="text-slate-600">·</span>
+                <span className="text-cyan-300">Tick Latency {bridgeLatencyMs.toFixed(1)}ms</span>
               </p>
             </div>
           </div>
 
-          {/* Center: Live Currency Switcher & Global Equity Metrics */}
-          <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
+          {/* Center/Right: Live Currency Switcher, Equity Card & Quick Actions */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {/* Currency Toggle */}
-            <div className="flex items-center bg-[#050811] p-1 rounded-xl border border-white/10 text-xs font-mono">
+            <div className="flex items-center bg-[#090C12] p-1 rounded-xl border border-white/[0.08] text-xs font-mono">
               <button
+                type="button"
                 onClick={() => setCurrencyMode('USD')}
-                className={`px-3 py-1.5 rounded-lg transition font-bold ${
+                className={`px-2.5 py-1.5 rounded-lg transition font-semibold ${
                   currencyMode === 'USD'
-                    ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/30'
+                    ? 'bg-cyan-500 text-slate-950'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                USD ($)
+                USD
               </button>
               <button
+                type="button"
                 onClick={() => setCurrencyMode('ZAR')}
-                className={`px-3 py-1.5 rounded-lg transition font-bold ${
+                className={`px-2.5 py-1.5 rounded-lg transition font-semibold ${
                   currencyMode === 'ZAR'
-                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30'
+                    ? 'bg-amber-500 text-slate-950'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                ZAR (R)
+                ZAR
               </button>
             </div>
 
             {/* Global Equity Card */}
-            <div className="px-3.5 py-1.5 rounded-xl bg-slate-900/80 border border-white/10 flex items-center gap-3 tabular-nums">
+            <div className="px-3.5 py-1.5 rounded-xl bg-[#090C12] border border-white/[0.08] flex items-center gap-3 font-mono tabular-nums">
               <div>
-                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
-                  Net Portfolio Equity
+                <span className="text-[10px] uppercase font-semibold text-slate-500 block tracking-wider font-sans">
+                  Net Equity
                 </span>
-                <span className="text-base sm:text-lg font-bold font-orbitron text-white">
+                <span className="text-sm sm:text-base font-bold text-white">
                   {formatMoney(accountEquity)}
                 </span>
               </div>
-              <div className="text-right pl-2 border-l border-white/10">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+              <div className="text-right pl-3 border-l border-white/[0.08]">
+                <span className="text-[10px] uppercase font-semibold text-slate-500 block tracking-wider font-sans">
                   Live PnL
                 </span>
                 <span
@@ -400,151 +486,103 @@ void OnTick() {
             </div>
 
             {/* Quick Action Buttons */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {onOpenAIScanner && (
+                <button
+                  type="button"
+                  onClick={onOpenAIScanner}
+                  className="px-3 py-2 rounded-xl bg-[#141B29] hover:bg-slate-800 text-cyan-300 border border-cyan-500/30 text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition"
+                >
+                  <ScanLine className="w-3.5 h-3.5" />
+                  <span>AI Scanner</span>
+                </button>
+              )}
+
+              {onOpenWorkspaceHub && (
+                <button
+                  type="button"
+                  onClick={onOpenWorkspaceHub}
+                  className="px-3 py-2 rounded-xl bg-[#141B29] hover:bg-slate-800 text-slate-200 border border-white/[0.08] text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition"
+                >
+                  <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Workspace</span>
+                </button>
+              )}
+
               <GooglePickerButton
                 variant="compact"
-                buttonLabel="Google Picker"
+                buttonLabel="Picker"
                 onFilePicked={(file) => {
-                  setQuickOrderNotice(`✓ Imported "${file.name}" via Google Picker`);
-                  setTimeout(() => setQuickOrderNotice(null), 4000);
+                  setQuickOrderNotice(`Imported "${file.name}" via Google Picker`);
+                  scheduleNoticeClear(setQuickOrderNotice, 4000);
                 }}
               />
 
               <button
+                type="button"
                 onClick={handleDownloadBridgeEA}
-                className="px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 text-xs font-semibold flex items-center gap-1.5 transition"
+                className="px-3 py-2 rounded-xl bg-[#141B29] hover:bg-slate-800 text-slate-200 border border-white/[0.08] text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition"
                 title="Download MQL5 Bridge Connector"
               >
-                <Download className="w-3.5 h-3.5" />
+                <Download className="w-3.5 h-3.5 text-cyan-400" />
                 <span className="hidden sm:inline">.mq5 Bridge</span>
               </button>
 
               <button
+                type="button"
                 onClick={() => setIsKillSwitchOpen(true)}
-                className="px-3 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-rose-900/40 transition active:scale-95"
+                className="px-3 py-2 rounded-xl bg-rose-600/15 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/35 text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition active:scale-95"
               >
                 <AlertTriangle className="w-3.5 h-3.5" />
-                <span>KILL SWITCH</span>
+                <span>Kill Switch</span>
               </button>
             </div>
           </div>
         </div>
 
         {/* =========================================================================
-            OMNI LENS MODE SELECTOR: One-Click Navigation between Combined & Lenses
+            UNIFIED SEGMENTED LENS BAR
             ========================================================================= */}
-        <div className="mt-4 pt-3 border-t border-white/10 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1 shrink-0 flex items-center gap-1">
-            <Compass className="w-3 h-3 text-cyan-400" /> Lens:
+        <div className="mt-4 pt-3 border-t border-white/[0.08] flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+          <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mr-1 shrink-0 flex items-center gap-1">
+            <Compass className="w-3 h-3 text-cyan-400" /> View:
           </span>
 
-          <button
-            onClick={() => setLensMode('ALL_IN_ONE')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide transition shrink-0 flex items-center gap-1.5 ${
-              lensMode === 'ALL_IN_ONE'
-                ? 'bg-gradient-to-r from-cyan-500 to-teal-500 text-slate-950 shadow-md shadow-cyan-500/30'
-                : 'bg-slate-900/60 hover:bg-slate-800 text-slate-300 border border-white/5'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>🌐 ALL-IN-ONE MASTER MATRIX</span>
-          </button>
-
-          <button
-            onClick={() => setLensMode('LIVE_EXECUTION')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide transition shrink-0 flex items-center gap-1.5 ${
-              lensMode === 'LIVE_EXECUTION'
-                ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 shadow-md'
-                : 'bg-slate-900/60 hover:bg-slate-800 text-slate-300 border border-white/5'
-            }`}
-          >
-            <Zap className="w-3.5 h-3.5 text-cyan-400" />
-            <span>⚡ TERMINAL & ORDERS</span>
-          </button>
-
-          <button
-            onClick={() => setLensMode('NEXUS_AVIATOR')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide transition shrink-0 flex items-center gap-1.5 ${
-              lensMode === 'NEXUS_AVIATOR'
-                ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md'
-                : 'bg-slate-900/60 hover:bg-slate-800 text-slate-300 border border-white/5'
-            }`}
-          >
-            <Flame className="w-3.5 h-3.5 text-amber-400" />
-            <span>✨ NEXUS2 & AVIATOR HUD</span>
-          </button>
-
-          <button
-            onClick={() => setLensMode('ALGOMAX_PROP')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide transition shrink-0 flex items-center gap-1.5 ${
-              lensMode === 'ALGOMAX_PROP'
-                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-md'
-                : 'bg-slate-900/60 hover:bg-slate-800 text-slate-300 border border-white/5'
-            }`}
-          >
-            <Award className="w-3.5 h-3.5 text-emerald-400" />
-            <span>💎 ALGOMAX EA v5.2</span>
-          </button>
-
-          <button
-            onClick={() => setLensMode('ALGOADMIN_FLEET')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide transition shrink-0 flex items-center gap-1.5 ${
-              lensMode === 'ALGOADMIN_FLEET'
-                ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-slate-950 shadow-md'
-                : 'bg-slate-900/60 hover:bg-slate-800 text-slate-300 border border-white/5'
-            }`}
-          >
-            <Shield className="w-3.5 h-3.5 text-purple-400" />
-            <span>🛡️ ALGO ADMIN PORTAL</span>
-          </button>
-
-          <button
-            onClick={() => setLensMode('LIQUIDITY_MAP')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide transition shrink-0 flex items-center gap-1.5 ${
-              lensMode === 'LIQUIDITY_MAP'
-                ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-slate-950 shadow-md'
-                : 'bg-slate-900/60 hover:bg-slate-800 text-slate-300 border border-white/5'
-            }`}
-          >
-            <Globe className="w-3.5 h-3.5 text-blue-400" />
-            <span>🌊 LIQUIDITY & MAP</span>
-          </button>
-
-          <button
-            onClick={() => setLensMode('SCRIPTS_SIGNALS')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide transition shrink-0 flex items-center gap-1.5 ${
-              lensMode === 'SCRIPTS_SIGNALS'
-                ? 'bg-gradient-to-r from-rose-500 to-pink-500 text-slate-950 shadow-md'
-                : 'bg-slate-900/60 hover:bg-slate-800 text-slate-300 border border-white/5'
-            }`}
-          >
-            <Code className="w-3.5 h-3.5 text-rose-400" />
-            <span>📜 SCRIPTS & VIP SIGNALS</span>
-          </button>
-
-          <button
-            onClick={() => setLensMode('EA_MIGRATE')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide transition shrink-0 flex items-center gap-1.5 ${
-              lensMode === 'EA_MIGRATE'
-                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-md'
-                : 'bg-slate-900/60 hover:bg-slate-800 text-slate-300 border border-white/5'
-            }`}
-          >
-            <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-            <span>📱 EA MIGRATE PRO (24/7 VPS)</span>
-          </button>
-
-          <button
-            onClick={() => setLensMode('TRADEPORT')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide transition shrink-0 flex items-center gap-1.5 ${
-              lensMode === 'TRADEPORT'
-                ? 'bg-gradient-to-r from-cyan-500 to-emerald-500 text-slate-950 shadow-md'
-                : 'bg-slate-900/60 hover:bg-slate-800 text-slate-300 border border-white/5'
-            }`}
-          >
-            <Server className="w-3.5 h-3.5 text-cyan-400" />
-            <span>🚢 TRADEPORT EA (FIXED VPS)</span>
-          </button>
+          {[
+            { id: 'ALL_IN_ONE' as OmniLensMode, label: 'Master Matrix', icon: Sparkles },
+            { id: 'EA_MERGE' as OmniLensMode, label: 'EA Merge Fusion', icon: GitMerge },
+            { id: 'LIVE_EXECUTION' as OmniLensMode, label: 'Terminal & Orders', icon: Zap },
+            { id: 'NEXUS_AVIATOR' as OmniLensMode, label: 'Scalper & Aviator', icon: Flame },
+            { id: 'ALGOMAX_PROP' as OmniLensMode, label: 'Institutional EA', icon: Award },
+            { id: 'ALGOADMIN_FLEET' as OmniLensMode, label: 'Fleet Admin', icon: Shield },
+            { id: 'LIQUIDITY_MAP' as OmniLensMode, label: 'Liquidity & Map', icon: Globe },
+            { id: 'SCRIPTS_SIGNALS' as OmniLensMode, label: 'Scripts & Signals', icon: Code },
+            { id: 'EA_MIGRATE' as OmniLensMode, label: 'EA Migrate', icon: Smartphone },
+            { id: 'EA_MATRIX' as OmniLensMode, label: 'EA Matrix', icon: Layers },
+            { id: 'ALGO_HOST' as OmniLensMode, label: 'AlgoHost Pro', icon: Server },
+            { id: 'EA_CENTRAL' as OmniLensMode, label: 'EA Central', icon: Smartphone },
+            { id: 'EA_VAULT' as OmniLensMode, label: 'EA Vault', icon: Key },
+            { id: 'I_TRADE_BOT' as OmniLensMode, label: 'iTradeBot AI', icon: Cpu },
+            { id: 'TRADEPORT' as OmniLensMode, label: 'Terminal Ports', icon: Server },
+          ].map((lens) => {
+            const Icon = lens.icon;
+            const active = lensMode === lens.id;
+            return (
+              <button
+                key={lens.id}
+                type="button"
+                onClick={() => setLensMode(lens.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap shrink-0 flex items-center gap-1.5 border ${
+                  active
+                    ? 'bg-cyan-500 text-slate-950 border-cyan-400'
+                    : 'bg-[#090C12] hover:bg-[#141B29] text-slate-400 hover:text-white border-white/[0.08]'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{lens.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -594,6 +632,18 @@ void OnTick() {
 
       {lensMode === 'EA_MIGRATE' && <EAMigrateProView />}
 
+      {lensMode === 'EA_MATRIX' && <EAMatrixView />}
+
+      {lensMode === 'ALGO_HOST' && <AlgoHostView />}
+
+      {lensMode === 'EA_CENTRAL' && <EACentralView />}
+
+      {lensMode === 'EA_VAULT' && <EAVaultView />}
+
+      {lensMode === 'EA_MERGE' && <EAMergeView />}
+
+      {lensMode === 'I_TRADE_BOT' && <ITradeBotView />}
+
       {lensMode === 'TRADEPORT' && <TradePortEAView />}
 
       {/* =========================================================================
@@ -602,6 +652,72 @@ void OnTick() {
           ========================================================================= */}
       {(lensMode === 'ALL_IN_ONE' || lensMode === 'LIVE_EXECUTION') && (
         <div className="space-y-4">
+          {/* AUTONOMOUS PROFIT PILOT & LIVE CONSENSUS GLASS BAR */}
+          <div className="glass-card rounded-2xl p-3.5 sm:p-4 border border-white/[0.1] flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                type="button"
+                onClick={toggleMasterAutoTrading}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 border transition whitespace-nowrap ${
+                  automatedSettings.masterAutoTrading
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : 'bg-rose-500/15 text-rose-300 border-rose-500/35'
+                }`}
+              >
+                <Power className="w-3.5 h-3.5" />
+                <span>
+                  Autonomous Profit Pilot: {automatedSettings.masterAutoTrading ? 'ARMED (100%)' : 'PAUSED'}
+                </span>
+              </button>
+
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                {['XAUUSD', 'EURUSD', 'BTCUSD', 'US30'].map((sym) => {
+                  const s = autonomousSnapshots[sym];
+                  return (
+                    <button
+                      key={`auto-${sym}`}
+                      type="button"
+                      onClick={() => setChartedSymbol(sym)}
+                      className="px-2.5 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.09] border border-white/[0.08] text-[11px] font-mono flex items-center gap-1.5 whitespace-nowrap"
+                    >
+                      <span className="font-bold text-white">{sym}</span>
+                      <span
+                        className={
+                          s?.action === 'BUY'
+                            ? 'text-emerald-400 font-bold'
+                            : s?.action === 'SELL'
+                            ? 'text-rose-400 font-bold'
+                            : 'text-slate-400'
+                        }
+                      >
+                        {s ? `${s.action} ${s.confidence}%` : 'LIVE'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
+              <button
+                type="button"
+                disabled={isAutonomousScanning}
+                onClick={() => void runAutonomousCycle(true)}
+                className="px-3 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-200 text-xs font-bold flex items-center gap-1.5 transition whitespace-nowrap"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isAutonomousScanning ? 'animate-spin' : ''}`} />
+                <span>{isAutonomousScanning ? 'Scanning 5M Candles...' : 'Auto-Scan & Execute'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setLensMode('EA_MERGE')}
+                className="px-3 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition whitespace-nowrap"
+              >
+                <GitMerge className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Open EA Merge</span>
+              </button>
+            </div>
+          </div>
           {/* NOTICE BANNERS */}
           {quickOrderNotice && (
             <div className="p-3 rounded-xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-200 text-xs font-mono flex items-center justify-between shadow-lg">
@@ -703,46 +819,38 @@ void OnTick() {
                       </div>
                     </div>
                     <div>
-                      <h3 className="text-sm font-extrabold text-white font-orbitron tracking-wide">
-                        NEXUS2.v1 <span className="text-amber-400 text-glow-amber">KANTE FX</span>
+                      <h3 className="text-sm font-bold text-white tracking-tight">
+                        SCALPER X2 <span className="text-amber-400">{brand.brandName}</span>
                       </h3>
-                      <p className="text-[10px] text-slate-400">Nexora AI 2.0 • Micro-Execution</p>
+                      <p className="text-[10px] text-slate-400">Proprietary AI 2.0 • Micro-Execution</p>
                     </div>
                   </div>
 
-                  {/* High-Impact News Counter */}
+                  {/* Real UTC Liquidity Session / Killzone Countdown */}
                   <div className="px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-right">
                     <span className="text-[9px] uppercase font-bold text-amber-300 block tracking-wider">
-                      GBP BOE Catalyst
+                      {sessionSchedule.nextLabel}
                     </span>
                     <span className="text-xs font-mono font-bold text-white tabular-nums">
-                      {boeHours}h {String(boeMinutes).padStart(2, '0')}m {String(boeSeconds).padStart(2, '0')}s
+                      {sessionSchedule.countdownText}
                     </span>
                   </div>
                 </div>
 
-                {/* Central Holographic Neural Core Graphic */}
+                {/* Nexora Core Summary */}
                 <div className="py-4 flex flex-col items-center justify-center relative">
-                  <div className="relative w-36 h-36 flex items-center justify-center">
-                    {/* Pulsing orbital rings */}
-                    <div className="absolute inset-0 rounded-full border border-cyan-500/20 animate-spin" style={{ animationDuration: '14s' }} />
-                    <div className="absolute inset-2 rounded-full border border-dashed border-amber-500/30 animate-spin" style={{ animationDuration: '9s', animationDirection: 'reverse' }} />
-                    <div className="absolute inset-5 rounded-full border border-emerald-500/20 animate-ping" style={{ animationDuration: '3s' }} />
-
-                    {/* Central Orb */}
-                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-cyan-500/20 via-amber-500/20 to-rose-500/20 backdrop-blur-md border border-cyan-400/40 flex flex-col items-center justify-center shadow-[0_0_30px_rgba(6,182,212,0.3)]">
-                      <Cpu className="w-6 h-6 text-cyan-300 animate-pulse" />
-                      <span className="text-[9px] font-bold text-white font-orbitron mt-0.5">NEXORA</span>
-                    </div>
+                  <div className="w-24 h-24 rounded-full bg-[#161D2B] border border-cyan-500/35 flex flex-col items-center justify-center">
+                    <Cpu className="w-7 h-7 text-cyan-300" />
+                    <span className="text-[10px] font-bold text-white mt-1">NEXORA 2.0</span>
                   </div>
 
                   {/* Live MetaTrader 5 Terminal Screen (ZAR Real Balance Climbing) */}
-                  <div className="w-full mt-3 p-3 rounded-xl bg-[#040711] border border-cyan-500/30 font-mono text-xs">
+                  <div className="w-full mt-4 p-3 rounded-xl bg-[#090C12] border border-cyan-500/30 font-mono text-xs">
                     <div className="flex items-center justify-between text-[10px] text-slate-400 pb-1.5 border-b border-white/5">
                       <span className="flex items-center gap-1.5 text-cyan-400 font-bold">
-                        <Radio className="w-3 h-3 animate-pulse" /> MT5 REAL (ZAR)
+                        <Radio className="w-3 h-3" /> MT5 REAL (ZAR)
                       </span>
-                      <span className="text-emerald-400 font-bold">● LIVE TICK FEED</span>
+                      <span className="text-emerald-400 font-bold">LIVE TICK FEED</span>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 mt-2 text-center">
@@ -802,6 +910,24 @@ void OnTick() {
               </div>
             </div>
           </div>
+
+          {/* =====================================================================
+              ROW 1.5: REAL-TIME MARKET SENTIMENT GAUGE (SIGNAL & BOT PRESSURE)
+              ===================================================================== */}
+          <MarketSentimentGauge
+            selectedSymbol={chartedSymbol}
+            price={resolveMarketPrice(prices, chartedSymbol)}
+            signals={signals}
+            robots={robots}
+            positions={positions}
+            pendingOrders={pendingOrders}
+            orderHistory={orderHistory}
+            webhookLogs={webhookLogs}
+            terminals={terminals}
+            ticksPerSecond={ticksPerSecond}
+            masterAutoTrading={automatedSettings.masterAutoTrading}
+            onQuickOrder={(side) => handleQuickMarketOrder(side, chartedSymbol)}
+          />
 
           {/* =====================================================================
               ROW 2: AVIATOR EA REAL-TIME SYSTEM PERFORMANCE HUD OVERLAY
@@ -874,7 +1000,7 @@ void OnTick() {
                   }`}
                 >
                   <Cpu className="w-3.5 h-3.5" />
-                  <span>Fleet Bots (6)</span>
+                  <span>Fleet Bots ({connectedBots.length})</span>
                 </button>
               </div>
 
@@ -913,7 +1039,9 @@ void OnTick() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                      {positions.map((pos) => (
+                      {positions.map((pos) => {
+                        const posDigits = resolveMarketPrice(prices, pos.symbol)?.digits ?? 2;
+                        return (
                         <tr key={pos.id} className="hover:bg-slate-900/50">
                           <td className="py-2.5 text-slate-400">#{pos.ticket}</td>
                           <td className="py-2.5 font-bold text-white">{pos.symbol}</td>
@@ -929,10 +1057,15 @@ void OnTick() {
                             </span>
                           </td>
                           <td className="py-2.5 text-slate-200">{pos.lots.toFixed(2)}</td>
-                          <td className="py-2.5 text-slate-300">{pos.openPrice.toFixed(2)}</td>
-                          <td className="py-2.5 text-cyan-300 font-semibold">{pos.currentPrice.toFixed(2)}</td>
+                          <td className="py-2.5 text-slate-300">
+                            {pos.openPrice.toFixed(posDigits)}
+                          </td>
+                          <td className="py-2.5 text-cyan-300 font-semibold">
+                            {pos.currentPrice.toFixed(posDigits)}
+                          </td>
                           <td className="py-2.5 text-slate-400">
-                            {pos.sl ? pos.sl.toFixed(2) : 'None'} / {pos.tp ? pos.tp.toFixed(2) : 'None'}
+                            {pos.sl ? pos.sl.toFixed(posDigits) : 'None'} /{' '}
+                            {pos.tp ? pos.tp.toFixed(posDigits) : 'None'}
                           </td>
                           <td className="py-2.5">
                             <span
@@ -940,8 +1073,7 @@ void OnTick() {
                                 pos.profit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                               }`}
                             >
-                              {pos.profit >= 0 ? '+' : ''}
-                              {formatMoney(pos.profit)}
+                              {formatMoney(pos.profit, true)}
                             </span>
                           </td>
                           <td className="py-2.5 text-right space-x-1">
@@ -967,7 +1099,8 @@ void OnTick() {
                             </button>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
@@ -984,7 +1117,7 @@ void OnTick() {
                   >
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-white font-orbitron">{bot.name}</span>
+                        <span className="text-xs font-bold text-white font-mono tabular-nums">{bot.name}</span>
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                           {bot.status}
                         </span>
@@ -1104,7 +1237,7 @@ void OnTick() {
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
                     ALGOMAX EA v5.2
                   </span>
-                  <h2 className="text-base sm:text-lg font-bold text-white font-orbitron">
+                  <h2 className="text-base sm:text-lg font-bold text-white font-mono tabular-nums">
                     Institutional Prop Challenge Pass Engine
                   </h2>
                 </div>
@@ -1129,7 +1262,7 @@ void OnTick() {
                 <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
                   Verified Pass Rate
                 </span>
-                <span className="text-xl font-extrabold text-cyan-300 font-orbitron">94.6%</span>
+                <span className="text-xl font-extrabold text-cyan-300 font-mono tabular-nums">94.6%</span>
                 <span className="text-[10px] text-emerald-400 block mt-0.5">FTMO, MFF, FundedNext</span>
               </div>
 
@@ -1137,7 +1270,7 @@ void OnTick() {
                 <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
                   Total Client Funded Capital
                 </span>
-                <span className="text-xl font-extrabold text-emerald-300 font-orbitron">$14,820,000+</span>
+                <span className="text-xl font-extrabold text-emerald-300 font-mono tabular-nums">$14,820,000+</span>
                 <span className="text-[10px] text-slate-400 block mt-0.5">1,482 Active Funded Accounts</span>
               </div>
 
@@ -1145,39 +1278,39 @@ void OnTick() {
                 <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
                   Profit Factor / Max DD
                 </span>
-                <span className="text-xl font-extrabold text-amber-300 font-orbitron">3.82 / 3.4%</span>
+                <span className="text-xl font-extrabold text-amber-300 font-mono tabular-nums">3.82 / 3.4%</span>
                 <span className="text-[10px] text-amber-400 block mt-0.5">Circuit breaker protected</span>
               </div>
             </div>
           </div>
 
           {/* =====================================================================
-              ROW 5: ALGO ADMIN PORTAL FLEET OPERATIONS (Super Admin)
+              ROW 5: SOVEREIGN FLEET ADMIN PORTAL OPERATIONS
               ===================================================================== */}
-          <div className="rounded-xl bg-[#070b14] border border-purple-500/25 p-5 shadow-xl">
+          <div className="rounded-xl bg-[#0F141E] border border-amber-500/25 p-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-400">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/35 flex items-center justify-center text-amber-400">
                   <Shield className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm sm:text-base font-bold text-white font-orbitron flex items-center gap-2">
-                    ALGO ADMIN FLEET PORTAL
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                      SUPER ADMIN
+                  <h3 className="text-sm sm:text-base font-bold text-white font-mono tabular-nums flex items-center gap-2">
+                    {brand.brandName} FLEET ADMIN PORTAL
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                      PRINCIPAL OWNER
                     </span>
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Logged in: <code className="text-purple-300">thulanimyeni19712@gmail.com</code>
+                    Owner Console: <code className="text-amber-300">{brand.ownerEmail}</code>
                   </p>
                 </div>
               </div>
 
               <button
                 onClick={() => setLensMode('ALGOADMIN_FLEET')}
-                className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 transition self-start sm:self-auto"
+                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 transition self-start sm:self-auto"
               >
-                <span>Launch Master Admin Portal</span>
+                <span>Launch Master Owner Portal</span>
                 <ExternalLink className="w-4 h-4" />
               </button>
             </div>
@@ -1203,32 +1336,46 @@ void OnTick() {
           </div>
 
           {/* =====================================================================
-              ROW 6: GLOBAL LIQUIDITY SESSIONS & VIP SIGNALS TAPE
+              ROW 6: GLOBAL LIQUIDITY SESSIONS & LIVE QUANT SIGNALS TAPE
               ===================================================================== */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Left: Global Forex Sessions Radar */}
+            {/* Left: Global Forex Sessions Radar (Real UTC Clock) */}
             <div className="p-4 rounded-xl bg-[#070b14] border border-white/10 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                  <span className="text-xs font-bold text-white font-orbitron flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-white font-mono tabular-nums flex items-center gap-1.5">
                     <Globe className="w-4 h-4 text-blue-400" /> Global Sessions Overlap
                   </span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300">
-                    London / NY Peak
+                  <span className="text-[10px] font-bold font-mono text-blue-300 tabular-nums">
+                    {sessionSchedule.isWeekend
+                      ? 'Weekend FX Pause'
+                      : sessionSchedule.overlapPeak
+                        ? 'London / NY Peak'
+                        : sessionSchedule.nyOpen
+                          ? 'New York Active'
+                          : sessionSchedule.londonOpen
+                            ? 'London Active'
+                            : 'Asian Desk Active'}
                   </span>
                 </div>
                 <div className="mt-3 space-y-2 text-xs font-mono">
                   <div className="flex items-center justify-between p-2 rounded bg-slate-900/60">
-                    <span className="text-slate-300">London Session</span>
-                    <span className="text-emerald-400 font-bold">● OPEN (High Volume)</span>
+                    <span className="text-slate-300">London Session (07–16 UTC)</span>
+                    <span className={sessionSchedule.londonOpen ? 'text-emerald-400 font-bold' : 'text-slate-500 font-bold'}>
+                      {sessionSchedule.londonOpen ? '● OPEN' : '○ CLOSED'}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between p-2 rounded bg-slate-900/60">
-                    <span className="text-slate-300">New York Session</span>
-                    <span className="text-emerald-400 font-bold">● OPEN (Peak Volatility)</span>
+                    <span className="text-slate-300">New York Session (12–21 UTC)</span>
+                    <span className={sessionSchedule.nyOpen ? 'text-emerald-400 font-bold' : 'text-slate-500 font-bold'}>
+                      {sessionSchedule.nyOpen ? '● OPEN' : '○ CLOSED'}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between p-2 rounded bg-slate-900/60">
-                    <span className="text-slate-300">Tokyo / Asian</span>
-                    <span className="text-slate-500 font-bold">○ CLOSED</span>
+                    <span className="text-slate-300">Tokyo / Asian (00–09 UTC)</span>
+                    <span className={sessionSchedule.tokyoOpen ? 'text-emerald-400 font-bold' : 'text-slate-500 font-bold'}>
+                      {sessionSchedule.tokyoOpen ? '● OPEN' : '○ CLOSED'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1241,41 +1388,60 @@ void OnTick() {
               </button>
             </div>
 
-            {/* Right: EasyWay VIP Signal Provider Stream */}
+            {/* Right: Live Quant Signal Stream wired to TradingContext signals & live prices */}
             <div className="p-4 rounded-xl bg-[#070b14] border border-white/10 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                  <span className="text-xs font-bold text-white font-orbitron flex items-center gap-1.5">
-                    <Zap className="w-4 h-4 text-amber-400" /> EasyWay2Trade Live Signals
+                  <span className="text-xs font-bold text-white font-mono tabular-nums flex items-center gap-1.5">
+                    <Zap className="w-4 h-4 text-amber-400" /> {brand.brandName} Live Signals
                   </span>
-                  <span className="text-[10px] text-emerald-400 font-bold font-mono">92% ACCURACY</span>
+                  <span className="text-[10px] text-emerald-400 font-bold font-mono tabular-nums">
+                    {signals.length > 0
+                      ? `${Math.round(signals.reduce((acc, s) => acc + s.confidence, 0) / signals.length)}% AVG CONFIDENCE`
+                      : 'LIVE FEED'}
+                  </span>
                 </div>
                 <div className="mt-3 space-y-2 text-xs font-mono">
-                  <div className="p-2.5 rounded bg-slate-900/70 border border-emerald-500/30 flex items-center justify-between">
-                    <div>
-                      <span className="font-bold text-white">XAUUSD • BUY SIGNAL</span>
-                      <span className="text-[10px] text-slate-400 block tabular-nums">Entry: 2652.50 • SL: 2645.00 • TP: 2668.00</span>
-                    </div>
-                    <button
-                      onClick={() => handleQuickMarketOrder('BUY', 'XAUUSD')}
-                      className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] transition active:scale-95"
-                    >
-                      1-Click Exec
-                    </button>
-                  </div>
-
-                  <div className="p-2.5 rounded bg-slate-900/70 border border-white/5 flex items-center justify-between">
-                    <div>
-                      <span className="font-bold text-white">EURUSD • SELL SIGNAL</span>
-                      <span className="text-[10px] text-slate-400 block tabular-nums">Entry: 1.0845 • SL: 1.0875 • TP: 1.0790</span>
-                    </div>
-                    <button
-                      onClick={() => handleQuickMarketOrder('SELL', 'EURUSD')}
-                      className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-[10px] transition active:scale-95"
-                    >
-                      1-Click Exec
-                    </button>
-                  </div>
+                  {(signals.length > 0
+                    ? signals.slice(0, 2)
+                    : [
+                        { id: 'live-xau', symbol: 'XAUUSD', side: 'BUY' as OrderSide, confidence: 88, entryPrice: 0, sl: 0, tp1: 0, tp2: 0 },
+                        { id: 'live-eur', symbol: 'EURUSD', side: 'SELL' as OrderSide, confidence: 84, entryPrice: 0, sl: 0, tp1: 0, tp2: 0 },
+                      ]
+                  ).map((sig) => {
+                    const liveQuote = resolveMarketPrice(prices, sig.symbol);
+                    const digits = liveQuote?.digits ?? 2;
+                    const pipSize = liveQuote?.pipSize ?? 0.1;
+                    const side: OrderSide = sig.side === 'SELL' ? 'SELL' : 'BUY';
+                    const liveEntry = liveQuote ? (side === 'BUY' ? liveQuote.ask : liveQuote.bid) : sig.entryPrice;
+                    const liveSl = side === 'BUY' ? liveEntry - pipSize * 50 : liveEntry + pipSize * 50;
+                    const liveTp = side === 'BUY' ? liveEntry + pipSize * 100 : liveEntry - pipSize * 100;
+                    return (
+                      <div
+                        key={sig.id}
+                        className={`p-2.5 rounded bg-slate-900/70 border flex items-center justify-between ${
+                          side === 'BUY' ? 'border-emerald-500/30' : 'border-rose-500/30'
+                        }`}
+                      >
+                        <div>
+                          <span className="font-bold text-white">
+                            {sig.symbol} · {side} SIGNAL ({sig.confidence}%)
+                          </span>
+                          <span className="text-[10px] text-slate-400 block tabular-nums">
+                            Live: {liveEntry.toFixed(digits)} · SL: {liveSl.toFixed(digits)} · TP: {liveTp.toFixed(digits)}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleQuickMarketOrder(side, sig.symbol)}
+                          className={`px-2.5 py-1 rounded text-white font-bold text-[10px] transition active:scale-95 shrink-0 ${
+                            side === 'BUY' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'
+                          }`}
+                        >
+                          1-Click Exec
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1290,49 +1456,104 @@ void OnTick() {
           </div>
 
           {/* =====================================================================
-              ROW 7: MOBILE CLOUD VPS HOSTING (EA MIGRATE PRO & TRADEPORT EA)
+              ROW 7: MOBILE CLOUD VPS & KEY VAULT ECOSYSTEM
               ===================================================================== */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 rounded-xl bg-[#070b14] border border-white/10 flex flex-col justify-between gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-4 rounded-xl bg-[#0F141E] border border-white/[0.08] flex flex-col justify-between gap-3">
               <div>
-                <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                  <span className="text-xs font-bold text-white font-orbitron flex items-center gap-1.5">
-                    <Smartphone className="w-4 h-4 text-emerald-400" /> EA Migrate Pro (Cloud VPS)
+                <div className="flex items-center justify-between pb-2 border-b border-white/[0.08]">
+                  <span className="text-xs font-bold text-white font-mono tabular-nums flex items-center gap-1.5">
+                    <Smartphone className="w-4 h-4 text-emerald-400" /> EA Migrate Pro
                   </span>
                   <span className="text-[11px] font-bold text-emerald-400 tabular-nums">$39/mo · 1ms</span>
                 </div>
                 <p className="text-xs text-slate-300 font-sans mt-2.5 leading-relaxed">
-                  Migrate any MT4/MT5 robot to Equinix LD4/NY4 in 3 steps with NFP/CPI news freeze buffers and zero PC dependency.
+                  Migrate MT4/MT5 robots to Equinix LD4/NY4 in 3 steps with NFP/CPI news freeze shields.
                 </p>
               </div>
               <button
                 onClick={() => setLensMode('EA_MIGRATE')}
-                className="w-full py-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition"
+                className="w-full py-2 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition"
               >
-                <span>Open EA Migrate Pro Wizard</span>
+                <span>Open EA Migrate Pro</span>
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            <div className="p-4 rounded-xl bg-[#070b14] border border-white/10 flex flex-col justify-between gap-3">
+            <div className="p-4 rounded-xl bg-[#0F141E] border border-white/[0.08] flex flex-col justify-between gap-3">
               <div>
-                <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                  <span className="text-xs font-bold text-white font-orbitron flex items-center gap-1.5">
-                    <Server className="w-4 h-4 text-cyan-400" /> TradePort EA (Fixed Ports)
+                <div className="flex items-center justify-between pb-2 border-b border-white/[0.08]">
+                  <span className="text-xs font-bold text-white font-mono tabular-nums flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-cyan-400" /> EA Matrix Grid
                   </span>
-                  <span className="text-[11px] font-bold text-cyan-300 tabular-nums">R600 / $36 Fixed</span>
+                  <span className="text-[11px] font-bold text-cyan-300 tabular-nums">Mobile Sync</span>
                 </div>
                 <p className="text-xs text-slate-300 font-sans mt-2.5 leading-relaxed">
-                  1/3/12-month fixed-term MT4/MT5 cloud ports with zero hidden auto-renewals plus USDT/BTC/ETH affiliate payouts.
+                  Phone-first remote MT4/MT5 controller, broker linker, and verified mentor copy matrix.
                 </p>
               </div>
               <button
-                onClick={() => setLensMode('TRADEPORT')}
-                className="w-full py-2 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition"
+                onClick={() => setLensMode('EA_MATRIX')}
+                className="w-full py-2 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition"
               >
-                <span>Open TradePort EA Console</span>
+                <span>Open EA Matrix</span>
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </button>
+            </div>
+
+            <div className="p-4 rounded-xl bg-[#0F141E] border border-white/[0.08] flex flex-col justify-between gap-3">
+              <div>
+                <div className="flex items-center justify-between pb-2 border-b border-white/[0.08]">
+                  <span className="text-xs font-bold text-white font-mono tabular-nums flex items-center gap-1.5">
+                    <Server className="w-4 h-4 text-emerald-400" /> Algohost Cloud
+                  </span>
+                  <span className="text-[11px] font-bold text-emerald-400 tabular-nums">$29 / Slot</span>
+                </div>
+                <p className="text-xs text-slate-300 font-sans mt-2.5 leading-relaxed">
+                  1-click mobile EA container launcher with plug-and-play bots and live drawdown caps.
+                </p>
+              </div>
+              <button
+                onClick={() => setLensMode('ALGO_HOST')}
+                className="w-full py-2 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition"
+              >
+                <span>Open Algohost VPS</span>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-xl bg-[#0F141E] border border-white/[0.08] flex flex-col justify-between gap-3">
+              <div>
+                <div className="flex items-center justify-between pb-2 border-b border-white/[0.08]">
+                  <span className="text-xs font-bold text-white font-mono tabular-nums flex items-center gap-1.5">
+                    <Key className="w-4 h-4 text-cyan-400" /> EA Vault &amp; Ports
+                  </span>
+                  <span className="text-[11px] font-bold text-cyan-300 tabular-nums">HWID · .SET</span>
+                </div>
+                <p className="text-xs text-slate-300 font-sans mt-2.5 leading-relaxed">
+                  Cryptographic WebAuth key manager, custom .SET compiler, and TradePort fixed terminals.
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  onClick={() => setLensMode('EA_CENTRAL')}
+                  className="py-2 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold transition"
+                >
+                  EA Central
+                </button>
+                <button
+                  onClick={() => setLensMode('EA_VAULT')}
+                  className="py-2 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 text-[11px] font-bold transition"
+                >
+                  EA Vault
+                </button>
+                <button
+                  onClick={() => setLensMode('TRADEPORT')}
+                  className="py-2 rounded-lg bg-[#161D2B] hover:bg-slate-800 text-slate-200 border border-white/[0.08] text-[11px] font-bold transition"
+                >
+                  TradePort
+                </button>
+              </div>
             </div>
           </div>
 

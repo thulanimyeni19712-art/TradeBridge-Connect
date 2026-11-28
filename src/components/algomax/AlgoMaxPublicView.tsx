@@ -14,6 +14,7 @@ import {
   Check,
 } from 'lucide-react';
 import { generateKeyCode } from '../../lib/crypto';
+import { useBrand } from '../../context/BrandContext';
 
 interface AlgoMaxPublicViewProps {
   onOpenAdminPortal: () => void;
@@ -23,6 +24,7 @@ interface AlgoMaxPublicViewProps {
 export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
   onOpenAdminPortal,
 }) => {
+  const { brand, accent } = useBrand();
   const [selectedPlan, setSelectedPlan] = useState<'STARTER' | 'PROP' | 'LIFETIME'>('PROP');
   const [calcBalance, setCalcBalance] = useState<number>(50000);
   const [calcRisk, setCalcRisk] = useState<number>(1.0);
@@ -62,7 +64,7 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
 
   const handleCopyKey = () => {
     if (!generatedKey) return;
-    navigator.clipboard.writeText(generatedKey);
+    void navigator.clipboard?.writeText(generatedKey).catch(() => undefined);
     setCopiedKey(true);
     const t = window.setTimeout(() => setCopiedKey(false), 3000);
     timersRef.current.push(t);
@@ -99,70 +101,64 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
   return (
     <div className="space-y-12 pb-16 font-mono text-slate-100 selection:bg-cyan-500/30 selection:text-cyan-200">
       {/* TOP NOTIFICATION BAR */}
-      <div className="p-3 bg-gradient-to-r from-cyan-950/80 via-blue-950/90 to-purple-950/80 border border-cyan-500/40 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-[0_0_25px_rgba(6,182,212,0.15)]">
+      <div className="p-3 bg-[#0F141E] border border-white/[0.08] rounded-2xl flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 text-xs">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-          <span className="font-bold text-white font-orbitron">
-            ALGOMAX-EA.COM OFFICIAL RELEASE • V5.2.1 INSTITUTIONAL PRO
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+          <span className="font-bold text-white font-sans">
+            {brand.brandName} INSTITUTIONAL SUITE • V5.2 PROPRIETARY
           </span>
-          <span className="hidden md:inline px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-            PRO FIRM COMPLIANT
+          <span className="hidden md:inline px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+            PROP FIRM COMPLIANT
           </span>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={onOpenAdminPortal}
-            className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold font-orbitron tracking-wider transition flex items-center gap-1.5 shadow-[0_0_15px_rgba(168,85,247,0.4)]"
+            className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold font-sans tracking-wider transition flex items-center gap-1.5"
           >
             <Server className="w-3.5 h-3.5" />
-            <span>Launch Algo Admin Portal</span>
+            <span>Launch Fleet Admin Portal</span>
           </button>
         </div>
       </div>
 
       {/* HERO SECTION */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-[#080d19] via-[#091024] to-[#050811] border border-cyan-500/30 p-8 sm:p-12 text-center shadow-[0_0_80px_rgba(6,182,212,0.12)]">
-        {/* Futuristic Cyber Lighting */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-64 bg-cyan-500/10 rounded-full blur-[120px] pointer-events-none" />
-        <div className="absolute inset-0 hud-grid opacity-25 pointer-events-none" />
-
+      <div className="relative overflow-hidden rounded-2xl bg-[#0F141E] border border-white/[0.08] p-8 sm:p-12 text-center">
         <div className="relative z-10 max-w-4xl mx-auto space-y-6">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-cyan-950/80 border border-cyan-500/50 text-cyan-300 text-xs font-bold shadow-sm">
-            <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
-            <span>Institutional MT4 &amp; MT5 Trading Algorithm • 0.05ms Execution</span>
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-[#161D2B] border border-cyan-500/30 text-cyan-300 text-xs font-bold">
+            <Sparkles className="w-4 h-4 text-cyan-400" />
+            <span>{brand.ownerEntity} · MT4 &amp; MT5 Algorithm · 0.05ms Execution</span>
           </div>
 
-          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight font-orbitron drop-shadow-[0_0_30px_rgba(255,255,255,0.2)]">
-            Algorithmic Precision for <span className="text-cyan-400">Forex, Gold &amp; Indices</span>
+          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight font-sans">
+            Algorithmic Precision for <span className={accent.textClass}>Forex, Gold &amp; Indices</span>
           </h1>
 
           <p className="text-sm sm:text-base text-slate-300 font-sans max-w-2xl mx-auto leading-relaxed">
-            Engineered exclusively for passing Prop Firm challenges (FTMO, ThinkMarkets, Emerge, Apex)
-            and scaling personal capital with institutional Smart Money Concept (SMC) order blocks,
-            dynamic spread protection, and zero-martingale risk management.
+            Owned &amp; operated under <span className="text-white font-semibold">{brand.brandName}</span> for passing Prop Firm challenges (FTMO, ThinkMarkets, Emerge, Apex) and scaling capital with institutional Smart Money Concept (SMC) order blocks, dynamic spread protection, and zero-martingale risk management.
           </p>
 
           {/* Key Metric Highlights */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 pt-4 tabular-nums">
-            <div className="p-3.5 rounded-2xl bg-[#0c1322] border border-cyan-800/40">
-              <div className="text-xl sm:text-2xl font-black text-emerald-400 font-orbitron">
+            <div className="p-3.5 rounded-2xl bg-[#161D2B] border border-white/[0.08]">
+              <div className="text-xl sm:text-2xl font-black text-emerald-400 font-mono tabular-nums">
                 94.6%
               </div>
               <div className="text-[11px] text-slate-400 font-sans mt-0.5">Prop Pass Rate</div>
             </div>
-            <div className="p-3.5 rounded-2xl bg-[#0c1322] border border-cyan-800/40">
-              <div className="text-xl sm:text-2xl font-black text-cyan-400 font-orbitron">3.82</div>
+            <div className="p-3.5 rounded-2xl bg-[#161D2B] border border-white/[0.08]">
+              <div className="text-xl sm:text-2xl font-black text-cyan-400 font-mono tabular-nums">3.82</div>
               <div className="text-[11px] text-slate-400 font-sans mt-0.5">Profit Factor</div>
             </div>
-            <div className="p-3.5 rounded-2xl bg-[#0c1322] border border-cyan-800/40">
-              <div className="text-xl sm:text-2xl font-black text-purple-300 font-orbitron">
+            <div className="p-3.5 rounded-2xl bg-[#161D2B] border border-white/[0.08]">
+              <div className="text-xl sm:text-2xl font-black text-amber-300 font-mono tabular-nums">
                 &lt; 2.8%
               </div>
               <div className="text-[11px] text-slate-400 font-sans mt-0.5">Max Trailing DD</div>
             </div>
-            <div className="p-3.5 rounded-2xl bg-[#0c1322] border border-cyan-800/40">
-              <div className="text-xl sm:text-2xl font-black text-amber-300 font-orbitron">
+            <div className="p-3.5 rounded-2xl bg-[#161D2B] border border-white/[0.08]">
+              <div className="text-xl sm:text-2xl font-black text-emerald-300 font-mono tabular-nums">
                 $14.8M+
               </div>
               <div className="text-[11px] text-slate-400 font-sans mt-0.5">Funded Capital</div>
@@ -176,18 +172,18 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
                 setSelectedPlan('PROP');
                 setIsCheckoutOpen(true);
               }}
-              className="py-3.5 px-8 rounded-2xl bg-gradient-to-r from-cyan-500 via-teal-500 to-cyan-500 hover:from-cyan-400 hover:to-teal-400 text-slate-950 font-black font-orbitron tracking-wider text-sm transition shadow-[0_0_30px_rgba(6,182,212,0.4)] active:scale-95 flex items-center gap-2"
+              className="py-3.5 px-8 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black font-sans tracking-wider text-sm transition active:scale-95 flex items-center gap-2"
             >
               <Zap className="w-4 h-4 fill-slate-950" />
-              <span>Get AlgoMax EA v5.2</span>
+              <span>Deploy {brand.brandName} EA v5.2</span>
             </button>
 
             <button
               onClick={onOpenAdminPortal}
-              className="py-3.5 px-6 rounded-2xl bg-[#101726] hover:bg-[#151f33] border border-slate-700 hover:border-purple-500/50 text-purple-300 font-bold font-orbitron text-xs transition flex items-center gap-2"
+              className="py-3.5 px-6 rounded-xl bg-[#161D2B] hover:bg-[#1E2738] border border-white/[0.08] hover:border-amber-500/40 text-amber-300 font-bold font-sans text-xs transition flex items-center gap-2"
             >
               <Server className="w-4 h-4" />
-              <span>Algo Admin Portal (Vendor Access)</span>
+              <span>Fleet Admin Portal ({brand.ownerName})</span>
             </button>
           </div>
         </div>
@@ -196,10 +192,10 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
       {/* CORE STRATEGY & INSTITUTIONAL ADVANTAGES */}
       <div className="space-y-6">
         <div className="text-center space-y-2">
-          <div className="text-xs font-bold text-cyan-400 uppercase tracking-widest font-orbitron">
+          <div className="text-xs font-bold text-cyan-400 uppercase tracking-widest font-sans">
             ENGINE ARCHITECTURE
           </div>
-          <h2 className="text-2xl sm:text-3xl font-black text-white font-orbitron">
+          <h2 className="text-2xl sm:text-3xl font-black text-white font-sans">
             Why AlgoMax Dominates MetaTrader 4 &amp; 5
           </h2>
           <p className="text-xs sm:text-sm text-slate-400 font-sans max-w-xl mx-auto">
@@ -213,7 +209,7 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
             <div className="p-3 rounded-xl bg-cyan-500/10 text-cyan-400 w-fit">
               <Cpu className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-bold text-white font-orbitron">
+            <h3 className="text-base font-bold text-white font-sans">
               SMC Order Block &amp; FVG Harvester
             </h3>
             <p className="text-xs text-slate-400 font-sans leading-relaxed">
@@ -222,11 +218,11 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
             </p>
           </div>
 
-          <div className="p-6 rounded-2xl bg-[#0a0f1d] border border-slate-800 hover:border-purple-500/40 transition space-y-3">
-            <div className="p-3 rounded-xl bg-purple-500/10 text-purple-400 w-fit">
+          <div className="p-6 rounded-2xl bg-[#0F141E] border border-white/[0.08] hover:border-emerald-500/40 transition space-y-3">
+            <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400 w-fit">
               <ShieldCheck className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-bold text-white font-orbitron">
+            <h3 className="text-base font-bold text-white font-sans">
               Prop Firm 4% Drawdown Guard
             </h3>
             <p className="text-xs text-slate-400 font-sans leading-relaxed">
@@ -239,7 +235,7 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
             <div className="p-3 rounded-xl bg-amber-500/10 text-amber-400 w-fit">
               <Activity className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-bold text-white font-orbitron">
+            <h3 className="text-base font-bold text-white font-sans">
               Live News Circuit Breaker
             </h3>
             <p className="text-xs text-slate-400 font-sans leading-relaxed">
@@ -251,14 +247,14 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
       </div>
 
       {/* INTERACTIVE PROFIT & PROP PASS CALCULATOR */}
-      <div className="p-6 sm:p-8 rounded-3xl bg-[#0a0f1e] border border-cyan-800/40 shadow-xl space-y-6">
+      <div className="p-6 sm:p-8 rounded-2xl bg-[#0F141E] border border-white/[0.08] space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
           <div>
-            <div className="text-xs font-bold text-cyan-400 uppercase tracking-widest font-orbitron">
+            <div className="text-xs font-bold text-cyan-400 uppercase tracking-widest font-sans">
               INTERACTIVE EVALUATION PROJECTOR
             </div>
-            <h3 className="text-xl font-black text-white font-orbitron mt-0.5">
-              AlgoMax Performance &amp; Evaluation Projector
+            <h3 className="text-xl font-black text-white font-sans mt-0.5">
+              {brand.brandName} Evaluation Projector
             </h3>
           </div>
           <span className="text-xs text-slate-400 font-sans">
@@ -294,7 +290,7 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
             <div>
               <div className="flex justify-between text-xs font-bold mb-2">
                 <span className="text-slate-300">Risk per Trade Model:</span>
-                <span className="text-purple-300">{calcRisk}% per ticket</span>
+                <span className="text-emerald-300">{calcRisk}% per ticket</span>
               </div>
               <input
                 type="range"
@@ -303,7 +299,7 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
                 step="0.25"
                 value={calcRisk}
                 onChange={(e) => setCalcRisk(Number(e.target.value))}
-                className="w-full accent-purple-500 cursor-pointer"
+                className="w-full accent-emerald-500 cursor-pointer"
               />
               <div className="flex justify-between text-[10px] text-slate-500 mt-1">
                 <span>0.25% (Ultra Safe)</span>
@@ -336,35 +332,35 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
 
           {/* Results Card */}
           <div className="p-6 rounded-2xl bg-gradient-to-br from-[#10172b] to-[#0c1222] border border-cyan-500/40 space-y-4 tabular-nums">
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider font-orbitron">
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider font-sans">
               Projected Algorithm Output
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <div className="text-[11px] text-slate-400">Projected Net Gain</div>
-                <div className="text-2xl font-black text-emerald-400 font-orbitron mt-0.5">
+                <div className="text-2xl font-black text-emerald-400 font-mono tabular-nums mt-0.5">
                   +${projectedMonthlyReturn.toLocaleString()}
                 </div>
               </div>
 
               <div>
                 <div className="text-[11px] text-slate-400">Projected Max Drawdown</div>
-                <div className="text-2xl font-black text-cyan-300 font-orbitron mt-0.5">
+                <div className="text-2xl font-black text-cyan-300 font-mono tabular-nums mt-0.5">
                   {projectedDrawdownPct}%
                 </div>
               </div>
 
               <div>
                 <div className="text-[11px] text-slate-400">Pass Probability</div>
-                <div className="text-2xl font-black text-purple-300 font-orbitron mt-0.5">
+                <div className="text-2xl font-black text-amber-300 font-mono tabular-nums mt-0.5">
                   {passProbabilityPct}%
                 </div>
               </div>
 
               <div>
                 <div className="text-[11px] text-slate-400">Target Profit Goal</div>
-                <div className="text-2xl font-black text-white font-orbitron mt-0.5">
+                <div className="text-2xl font-black text-white font-mono tabular-nums mt-0.5">
                   ${(calcBalance * 0.08).toLocaleString()}
                 </div>
               </div>
@@ -376,7 +372,7 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
                   setSelectedPlan('PROP');
                   setIsCheckoutOpen(true);
                 }}
-                className="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black font-orbitron text-xs transition shadow-md flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black font-sans text-xs transition shadow-md flex items-center justify-center gap-2"
               >
                 <span>Deploy This Setting to MT5 Terminal</span>
                 <ArrowRight className="w-4 h-4" />
@@ -389,10 +385,10 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
       {/* PRICING & LICENSE PLANS */}
       <div className="space-y-6">
         <div className="text-center space-y-2">
-          <div className="text-xs font-bold text-cyan-400 uppercase tracking-widest font-orbitron">
+          <div className="text-xs font-bold text-cyan-400 uppercase tracking-widest font-sans">
             INVESTMENT TIERS
           </div>
-          <h2 className="text-2xl sm:text-3xl font-black text-white font-orbitron">
+          <h2 className="text-2xl sm:text-3xl font-black text-white font-sans">
             Select Your AlgoMax EA License
           </h2>
           <p className="text-xs sm:text-sm text-slate-400 font-sans max-w-xl mx-auto">
@@ -403,16 +399,16 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Plan 1: Starter */}
           <div
-            className={`p-6 rounded-3xl border transition relative flex flex-col justify-between ${
+            className={`p-6 rounded-2xl border transition relative flex flex-col justify-between ${
               selectedPlan === 'STARTER'
-                ? 'bg-[#0f172a] border-cyan-500 shadow-[0_0_30px_rgba(6,182,212,0.2)]'
-                : 'bg-[#0a0f1d] border-slate-800 hover:border-slate-700'
+                ? 'bg-[#161D2B] border-cyan-500'
+                : 'bg-[#0F141E] border-white/[0.08] hover:border-slate-700'
             }`}
           >
             <div className="space-y-4">
-              <div className="text-xs font-bold text-slate-400 font-orbitron">ALGOMAX STARTER</div>
+              <div className="text-xs font-bold text-slate-400 font-sans">CORE SINGLE ENGINE</div>
               <div className="flex items-baseline gap-1">
-                <span className="text-3xl font-black text-white font-orbitron">$199</span>
+                <span className="text-3xl font-black text-white font-mono tabular-nums">$199</span>
                 <span className="text-xs text-slate-400">/ one-time</span>
               </div>
               <p className="text-xs text-slate-400 font-sans">
@@ -450,21 +446,21 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
 
           {/* Plan 2: Prop Evaluation Pass (Featured) */}
           <div
-            className={`p-6 rounded-3xl border transition relative flex flex-col justify-between ${
+            className={`p-6 rounded-2xl border transition relative flex flex-col justify-between ${
               selectedPlan === 'PROP'
-                ? 'bg-gradient-to-b from-[#131d38] to-[#0a1226] border-cyan-400 shadow-[0_0_40px_rgba(6,182,212,0.35)]'
-                : 'bg-[#0a0f1d] border-slate-800'
+                ? 'bg-[#161D2B] border-cyan-400'
+                : 'bg-[#0F141E] border-white/[0.08]'
             }`}
           >
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-cyan-500 text-slate-950 text-[10px] font-black tracking-wider uppercase shadow-md">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-lg bg-cyan-500 text-slate-950 text-[10px] font-black tracking-wider uppercase">
               MOST POPULAR • PROP PASS
             </div>
             <div className="space-y-4">
-              <div className="text-xs font-bold text-cyan-400 font-orbitron mt-1">
-                ALGOMAX PROP EVALUATION
+              <div className="text-xs font-bold text-cyan-400 font-sans mt-1">
+                {brand.brandName} PROP EVALUATION
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-3xl font-black text-white font-orbitron">$399</span>
+                <span className="text-3xl font-black text-white font-mono tabular-nums">$399</span>
                 <span className="text-xs text-slate-400">/ one-time</span>
               </div>
               <p className="text-xs text-slate-300 font-sans">
@@ -498,7 +494,7 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
                 setSelectedPlan('PROP');
                 setIsCheckoutOpen(true);
               }}
-              className="mt-6 w-full py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-400 hover:to-teal-400 text-slate-950 font-black font-orbitron text-xs transition shadow-lg active:scale-95"
+              className="mt-6 w-full py-3.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black font-sans text-xs transition active:scale-95"
             >
               Get Prop Pass License
             </button>
@@ -506,43 +502,43 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
 
           {/* Plan 3: Institutional Lifetime */}
           <div
-            className={`p-6 rounded-3xl border transition relative flex flex-col justify-between ${
+            className={`p-6 rounded-2xl border transition relative flex flex-col justify-between ${
               selectedPlan === 'LIFETIME'
-                ? 'bg-[#15112e] border-purple-500 shadow-[0_0_30px_rgba(168,85,247,0.2)]'
-                : 'bg-[#0a0f1d] border-slate-800 hover:border-slate-700'
+                ? 'bg-[#161D2B] border-amber-500'
+                : 'bg-[#0F141E] border-white/[0.08] hover:border-slate-700'
             }`}
           >
             <div className="space-y-4">
-              <div className="text-xs font-bold text-purple-400 font-orbitron">
-                INSTITUTIONAL LIFETIME
+              <div className="text-xs font-bold text-amber-400 font-sans">
+                FULL SOVEREIGN OWNERSHIP
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-3xl font-black text-white font-orbitron">$799</span>
+                <span className="text-3xl font-black text-white font-mono tabular-nums">$799</span>
                 <span className="text-xs text-slate-400">/ lifetime</span>
               </div>
               <p className="text-xs text-slate-400 font-sans">
-                For prop firm portfolio managers, mentors, and fund managers managing multiple accounts.
+                For principal fund owners, portfolio managers, and multi-account execution desks.
               </p>
               <ul className="space-y-2.5 text-xs text-slate-300 pt-2 border-t border-slate-800">
                 <li className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
+                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
                   <span className="font-bold text-white">Unlimited MT4/MT5 Accounts</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
-                  <span>Algo Admin Portal Direct Management</span>
+                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Fleet Admin Portal Direct Management</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
+                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
                   <span>Remote HWID Reassignment Dashboard</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
-                  <span>White-Label Branding Capability</span>
+                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Full White-Label &amp; IP Ownership</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
-                  <span>Direct Quant Developer Telegram Desk</span>
+                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Direct Quant Desk Priority</span>
                 </li>
               </ul>
             </div>
@@ -551,24 +547,24 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
                 setSelectedPlan('LIFETIME');
                 setIsCheckoutOpen(true);
               }}
-              className="mt-6 w-full py-3 rounded-xl bg-purple-600/30 hover:bg-purple-600 border border-purple-500/50 text-purple-200 hover:text-white font-bold text-xs transition"
+              className="mt-6 w-full py-3 rounded-xl bg-amber-500/20 hover:bg-amber-500 border border-amber-500/40 text-amber-200 hover:text-slate-950 font-bold text-xs transition"
             >
-              Choose Institutional
+              Choose Sovereign Ownership
             </button>
           </div>
         </div>
       </div>
 
       {/* DOWNLOADS & MT5 SETUP GUIDE */}
-      <div className="p-6 sm:p-8 rounded-3xl bg-[#080d19] border border-slate-800 space-y-5">
+      <div className="p-6 sm:p-8 rounded-2xl bg-[#0F141E] border border-white/[0.08] space-y-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
             <div className="p-3 rounded-xl bg-cyan-500/10 text-cyan-400">
               <Download className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-black text-white font-orbitron">
-                AlgoMax EA Installer &amp; Preset Files
+              <h3 className="text-base font-black text-white font-sans">
+                {brand.brandName} EA Installer &amp; Preset Files
               </h3>
               <p className="text-xs text-slate-400 font-sans">
                 Compatible with MetaTrader 5 Build 4000+ &amp; MetaTrader 4 Build 1420+
@@ -634,11 +630,11 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
       {/* CHECKOUT & INSTANT LICENSE GENERATOR MODAL */}
       {isCheckoutOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200 font-mono">
-          <div className="w-full max-w-lg bg-[#0a0f1d] border-2 border-cyan-500/60 rounded-3xl p-6 shadow-[0_0_60px_rgba(6,182,212,0.3)] space-y-5">
+          <div className="w-full max-w-lg bg-[#0F141E] border border-cyan-500/50 rounded-2xl p-6 shadow-2xl space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <Key className="w-5 h-5 text-cyan-400" />
-                <h3 className="text-base font-black text-white font-orbitron">
+                <h3 className="text-base font-black text-white font-sans">
                   ACTIVATE ALGOMAX {selectedPlan} LICENSE
                 </h3>
               </div>
@@ -697,7 +693,7 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
 
                 <button
                   type="submit"
-                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-400 hover:to-teal-400 text-slate-950 font-black font-orbitron text-xs tracking-wider transition shadow-lg active:scale-98"
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-400 hover:to-teal-400 text-slate-950 font-black font-sans text-xs tracking-wider transition shadow-lg active:scale-98"
                 >
                   Generate License Key &amp; Activate
                 </button>
@@ -708,7 +704,7 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
                   <CheckCircle2 className="w-8 h-8" />
                 </div>
                 <div>
-                  <h4 className="text-lg font-black text-white font-orbitron">License Generated!</h4>
+                  <h4 className="text-lg font-black text-white font-sans">License Generated!</h4>
                   <p className="text-xs text-slate-400 font-sans mt-0.5">
                     Your AlgoMax {selectedPlan} key has been synchronized with the Algo Admin Portal.
                   </p>
@@ -742,9 +738,9 @@ export const AlgoMaxPublicView: React.FC<AlgoMaxPublicViewProps> = ({
                       setIsCheckoutOpen(false);
                       onOpenAdminPortal();
                     }}
-                    className="flex-1 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs font-orbitron tracking-wider shadow-md"
+                    className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs font-sans tracking-wider"
                   >
-                    View in Admin Portal
+                    View in Fleet Portal
                   </button>
                 </div>
               </div>

@@ -3,6 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import { GoogleGenAI, Type } from '@google/genai';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -115,7 +116,7 @@ async function startServer() {
   const PORT = 3000;
   const serverStartMs = Date.now();
 
-  app.use(express.json({ limit: '4mb' }));
+  app.use(express.json({ limit: '10mb' }));
 
   // Stateful runtime registries (monotonically incremented, zero Math.random)
   let ticketSequence = 8941200;
@@ -240,6 +241,9 @@ async function startServer() {
       { yahoo: 'EURUSD=X', key: 'EURUSD', name: 'Euro / US Dollar', category: 'FOREX', digits: 5, pipSize: 0.0001, spreadPips: 1.2 },
       { yahoo: 'GBPUSD=X', key: 'GBPUSD', name: 'British Pound / US Dollar', category: 'FOREX', digits: 5, pipSize: 0.0001, spreadPips: 1.4 },
       { yahoo: 'GBPJPY=X', key: 'GBPJPY', name: 'British Pound / Japanese Yen', category: 'FOREX', digits: 3, pipSize: 0.01, spreadPips: 1.8 },
+      { yahoo: 'CADJPY=X', key: 'CADJPY', name: 'Canadian Dollar / Japanese Yen', category: 'FOREX', digits: 3, pipSize: 0.01, spreadPips: 1.8 },
+      { yahoo: 'AUDUSD=X', key: 'AUDUSD', name: 'Australian Dollar / US Dollar', category: 'FOREX', digits: 5, pipSize: 0.0001, spreadPips: 1.4 },
+      { yahoo: 'JPY=X', key: 'USDJPY', name: 'US Dollar / Japanese Yen', category: 'FOREX', digits: 3, pipSize: 0.01, spreadPips: 1.1 },
       { yahoo: 'ZAR=X', key: 'USDZAR', name: 'US Dollar / South African Rand', category: 'FOREX', digits: 4, pipSize: 0.001, spreadPips: 3.5 },
       { yahoo: 'SI=F', key: '_SILVER_USD', name: 'Silver Spot USD', category: 'METALS', digits: 3, pipSize: 0.01, spreadPips: 2.0 },
       { yahoo: 'EUR=X', key: '_USD_EUR', name: 'USD to EUR Rate', category: 'FOREX', digits: 5, pipSize: 0.0001, spreadPips: 1.0 },
@@ -313,7 +317,7 @@ async function startServer() {
     }
 
     // 3. Interbank ExchangeRate fallback for FX if Yahoo FX omitted any pair
-    if (!updated['EURUSD'] || !updated['USDZAR'] || !updated['GBPJPY'] || !usdEurRate) {
+    if (!updated['EURUSD'] || !updated['USDZAR'] || !updated['GBPJPY'] || !updated['USDJPY'] || !updated['AUDUSD'] || !updated['CADJPY'] || !usdEurRate) {
       try {
         const erRes = await fetch('https://open.er-api.com/v6/latest/USD', { signal: AbortSignal.timeout(4000) });
         if (erRes.ok) {
@@ -357,6 +361,42 @@ async function startServer() {
                 updatedAt: timestamp,
               };
             }
+            if (!updated['AUDUSD'] && rates.AUD) {
+              const bid = Number((1 / rates.AUD).toFixed(5));
+              updated['AUDUSD'] = {
+                symbol: 'AUDUSD',
+                name: 'Australian Dollar / US Dollar',
+                category: 'FOREX',
+                bid,
+                ask: Number((bid + 0.00014).toFixed(5)),
+                spread: 1.4,
+                digits: 5,
+                change24h: 0,
+                high: bid,
+                low: bid,
+                pipSize: 0.0001,
+                source: 'Interbank FX API',
+                updatedAt: timestamp,
+              };
+            }
+            if (!updated['CADJPY'] && rates.CAD && rates.JPY) {
+              const bid = Number(((1 / rates.CAD) * rates.JPY).toFixed(3));
+              updated['CADJPY'] = {
+                symbol: 'CADJPY',
+                name: 'Canadian Dollar / Japanese Yen',
+                category: 'FOREX',
+                bid,
+                ask: Number((bid + 0.018).toFixed(3)),
+                spread: 1.8,
+                digits: 3,
+                change24h: 0,
+                high: bid,
+                low: bid,
+                pipSize: 0.01,
+                source: 'Interbank FX API',
+                updatedAt: timestamp,
+              };
+            }
             if (!updated['GBPJPY'] && rates.GBP && rates.JPY) {
               const bid = Number(((1 / rates.GBP) * rates.JPY).toFixed(3));
               updated['GBPJPY'] = {
@@ -366,6 +406,24 @@ async function startServer() {
                 bid,
                 ask: Number((bid + 0.018).toFixed(3)),
                 spread: 1.8,
+                digits: 3,
+                change24h: 0,
+                high: bid,
+                low: bid,
+                pipSize: 0.01,
+                source: 'Interbank FX API',
+                updatedAt: timestamp,
+              };
+            }
+            if (!updated['USDJPY'] && rates.JPY) {
+              const bid = Number(Number(rates.JPY).toFixed(3));
+              updated['USDJPY'] = {
+                symbol: 'USDJPY',
+                name: 'US Dollar / Japanese Yen',
+                category: 'FOREX',
+                bid,
+                ask: Number((bid + 0.011).toFixed(3)),
+                spread: 1.1,
                 digits: 3,
                 change24h: 0,
                 high: bid,
@@ -461,7 +519,11 @@ async function startServer() {
 
   // Real Historical & Intraday OHLC Candlesticks Endpoint
   app.get('/api/market/candles', async (req, res) => {
-    const symbol = String(req.query.symbol || 'XAUUSD').toUpperCase();
+    const rawSymbol = String(req.query.symbol || 'XAUUSD').toUpperCase();
+    const symbol = rawSymbol
+      .replace(/\.(M|MIC|PRO|ECN|RAW|STD|FX)$/i, '')
+      .replace(/(MIC|PRO|ECN)$/i, '')
+      .replace(/^([A-Z]{6})M$/i, '$1');
     const timeframe = String(req.query.interval || '5M').toUpperCase();
 
     try {
@@ -469,7 +531,6 @@ async function startServer() {
         BTCUSD: 'BTCUSDT',
         ETHUSD: 'ETHUSDT',
         XAUUSD: 'PAXGUSDT',
-        XAUUSDM: 'PAXGUSDT',
       };
 
       if (binanceMap[symbol]) {
@@ -490,7 +551,7 @@ async function startServer() {
           }));
           return res.json({
             success: true,
-            symbol,
+            symbol: rawSymbol,
             timeframe,
             source: `Binance Klines (${binanceMap[symbol]})`,
             candles,
@@ -503,11 +564,13 @@ async function startServer() {
         NAS100: '^IXIC',
         EURUSD: 'EURUSD=X',
         GBPUSD: 'GBPUSD=X',
+        AUDUSD: 'AUDUSD=X',
         GBPJPY: 'GBPJPY=X',
+        CADJPY: 'CADJPY=X',
+        USDJPY: 'JPY=X',
         USDZAR: 'ZAR=X',
-        XAGEURM: 'SI=F',
+        XAGEUR: 'SI=F',
         XAUUSD: 'GC=F',
-        XAUUSDM: 'GC=F',
       };
 
       const targetYahoo = yahooMap[symbol] || 'GC=F';
@@ -663,21 +726,48 @@ async function startServer() {
     }
 
     if (hasDiscord) {
+      let parsedWebhook: URL | null = null;
+      const allowedDiscordHosts = new Set([
+        'discord.com',
+        'www.discord.com',
+        'discordapp.com',
+        'ptb.discord.com',
+        'canary.discord.com',
+      ]);
       try {
-        const dcRes = await fetch(discordWebhookUrl.trim(), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: message }),
-          signal: AbortSignal.timeout(7000),
-        });
-        if (dcRes.ok || dcRes.status === 204) {
-          results.discordDelivered = true;
-        } else {
-          const errBody = await dcRes.text();
-          results.errors.push(`Discord HTTP ${dcRes.status}: ${errBody.slice(0, 140)}`);
+        const candidate = new URL(discordWebhookUrl.trim());
+        if (
+          candidate.protocol === 'https:' &&
+          allowedDiscordHosts.has(candidate.hostname.toLowerCase()) &&
+          candidate.pathname.startsWith('/api/webhooks/')
+        ) {
+          parsedWebhook = candidate;
         }
-      } catch (err: unknown) {
-        results.errors.push(`Discord error: ${(err as Error).message}`);
+      } catch {
+        parsedWebhook = null;
+      }
+
+      if (!parsedWebhook) {
+        results.errors.push(
+          'Invalid Discord Webhook URL: must use https://discord.com/api/webhooks/...'
+        );
+      } else {
+        try {
+          const dcRes = await fetch(parsedWebhook.toString(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: message }),
+            signal: AbortSignal.timeout(7000),
+          });
+          if (dcRes.ok || dcRes.status === 204) {
+            results.discordDelivered = true;
+          } else {
+            const errBody = await dcRes.text();
+            results.errors.push(`Discord HTTP ${dcRes.status}: ${errBody.slice(0, 140)}`);
+          }
+        } catch (err: unknown) {
+          results.errors.push(`Discord error: ${(err as Error).message}`);
+        }
       }
     }
 
@@ -699,19 +789,26 @@ async function startServer() {
     });
   });
 
+  const getRequestOrigin = (req: express.Request): string => {
+    const protoHeader = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
+    const host = req.get('host') || 'localhost:3000';
+    return `${protoHeader}://${host}`;
+  };
+
   // Real MQL5 EA code downloader endpoint
-  app.get('/api/download/mt5-bridge-ea', (_req, res) => {
+  app.get('/api/download/mt5-bridge-ea', (req, res) => {
+    const bridgeOrigin = getRequestOrigin(req);
     const mql5Code = `//+------------------------------------------------------------------+
 //|                                        AlgoTrade_Matrix_Bridge.mq5|
 //|                        Copyright 2026, AlgoTrade Matrix Ecosystem|
-//|                                  https://algotradematrix.io       |
+//|                                  ${bridgeOrigin}                 |
 //+------------------------------------------------------------------+
 #property copyright "AlgoTrade Matrix Ecosystem"
-#property link      "https://algotradematrix.io"
+#property link      "${bridgeOrigin}"
 #property version   "4.80"
 #property strict
 
-input string InpBridgeURL    = "https://YOUR_APP_URL/api/mt5/bridge";
+input string InpBridgeURL    = "${bridgeOrigin}/api/mt5/bridge";
 input string InpSecretToken  = "sec_bridge_live_883921";
 input double InpMaxSlippage  = 2.0;
 
@@ -1004,16 +1101,17 @@ void OnTick() {
   // AlgoMax EA: Verify Client License Key & Hardware ID
   app.post('/api/algomax/verify-license', (req, res) => {
     try {
-      const { licenseKey, hwid, accountNumber } = req.body;
-      if (!licenseKey) {
+      const { licenseKey, hwid, accountNumber } = req.body || {};
+      if (typeof licenseKey !== 'string' || !licenseKey.trim()) {
         return res.status(400).json({ valid: false, error: 'License key is required' });
       }
+      const normalizedKey = licenseKey.trim();
 
       const isFormatValid =
-        /^AMX-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+$/i.test(licenseKey) || licenseKey.startsWith('AMX-');
-      const tier = licenseKey.includes('INST')
+        /^AMX-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+$/i.test(normalizedKey) || normalizedKey.startsWith('AMX-');
+      const tier = normalizedKey.includes('INST')
         ? 'INSTITUTIONAL'
-        : licenseKey.includes('PROP')
+        : normalizedKey.includes('PROP')
           ? 'PROP_PASS'
           : 'STARTER';
 
@@ -1038,19 +1136,20 @@ void OnTick() {
   app.get('/api/algomax/download-ea', (req, res) => {
     const key = (req.query.key as string) || 'AMX-INST-9821-X99';
     const magic = (req.query.magic as string) || '882910';
+    const bridgeOrigin = getRequestOrigin(req);
 
     const sourceCode = `//+------------------------------------------------------------------+
 //|                                           AlgoMax_EA_v5.2_Pro.mq5|
 //|                    Copyright 2026, AlgoMax EA & Titan Quant Corp |
-//|                                     https://www.algomax-ea.com   |
+//|                                     ${bridgeOrigin}              |
 //+------------------------------------------------------------------+
 #property copyright "AlgoMax EA & Titan Quant Corp"
-#property link      "https://www.algomax-ea.com"
+#property link      "${bridgeOrigin}"
 #property version   "5.20"
 #property strict
 
 input string InpLicenseKey     = "${key}";
-input string InpBridgeServer   = "https://YOUR_APP_URL/api/mt5/bridge";
+input string InpBridgeServer   = "${bridgeOrigin}/api/mt5/bridge";
 input int    InpMagicNumber    = ${magic};
 input double InpDefaultLots    = 0.05;
 input double InpMaxDailyDD     = 4.0;
@@ -1107,24 +1206,41 @@ void OnTick() {
   app.post('/api/bridge/batch-order', (req, res) => {
     try {
       const startNs = process.hrtime.bigint();
-      const { tickets } = req.body;
-      const orderList = Array.isArray(tickets) ? tickets : [req.body];
+      const { tickets } = req.body || {};
+      const rawList = Array.isArray(tickets) ? tickets : [req.body || {}];
+      if (rawList.length === 0 || rawList.length > 50) {
+        return res.status(400).json({
+          success: false,
+          error: 'Batch order must include between 1 and 50 ticket entries.',
+        });
+      }
+      const orderList = rawList.filter((item) => item && typeof item === 'object');
+      if (orderList.length === 0) {
+        return res.status(400).json({ success: false, error: 'Invalid batch ticket payload.' });
+      }
+
       const elapsedMs = Number((Number(process.hrtime.bigint() - startNs) / 1e6).toFixed(2));
       totalExecutionsToday += orderList.length;
 
-      const dispatched = orderList.map((t: Record<string, unknown>, idx: number) => ({
-        ticket: nextTicket(),
-        symbol: String(t.symbol || 'XAUUSD'),
-        side: String(t.side || 'BUY'),
-        lots: Number(t.lots) || 0.05,
-        openPrice: Number(t.openPrice) || 2650.0,
-        sl: t.sl || null,
-        tp: t.tp || null,
-        comment: String(t.comment || `OmniBatch_T${idx + 1}`),
-        status: 'FILLED',
-        latencyMs: Math.max(0.1, elapsedMs),
-        fillTime: new Date().toISOString(),
-      }));
+      const dispatched = orderList.map((t: Record<string, unknown>, idx: number) => {
+        const rawLots = Number(t.lots);
+        const safeLots = Number.isFinite(rawLots) && rawLots > 0 ? Math.min(100, rawLots) : 0.05;
+        const rawPrice = Number(t.openPrice);
+        const safePrice = Number.isFinite(rawPrice) && rawPrice > 0 ? rawPrice : 2650.0;
+        return {
+          ticket: nextTicket(),
+          symbol: String(t.symbol || 'XAUUSD').toUpperCase().slice(0, 16),
+          side: String(t.side || 'BUY').toUpperCase() === 'SELL' ? 'SELL' : 'BUY',
+          lots: safeLots,
+          openPrice: safePrice,
+          sl: t.sl ?? null,
+          tp: t.tp ?? null,
+          comment: String(t.comment || `OmniBatch_T${idx + 1}`).slice(0, 80),
+          status: 'FILLED',
+          latencyMs: Math.max(0.1, elapsedMs),
+          fillTime: new Date().toISOString(),
+        };
+      });
 
       return res.json({
         success: true,
@@ -1136,7 +1252,7 @@ void OnTick() {
     }
   });
 
-  // TradePort EA: List & Provision 24/7 Cloud Ports
+  // TradePort EA: List, Provision, Update & Delete 24/7 Cloud Ports
   app.get('/api/tradeport/ports', (_req, res) => {
     return res.json({ success: true, ports: portsStore });
   });
@@ -1144,28 +1260,29 @@ void OnTick() {
   app.post('/api/tradeport/ports', (req, res) => {
     try {
       const startNs = process.hrtime.bigint();
-      const { label, platform, broker, server, accountLogin, eaFile, region, planTerm, initialBalance } = req.body;
-      const months = planTerm?.includes('12') ? 12 : planTerm?.includes('3') ? 3 : 1;
+      const { label, platform, broker, server, accountLogin, eaFile, region, planTerm, initialBalance } = req.body || {};
+      const months = typeof planTerm === 'string' && planTerm.includes('12') ? 12 : typeof planTerm === 'string' && planTerm.includes('3') ? 3 : 1;
       const expiry = new Date();
       expiry.setMonth(expiry.getMonth() + months);
 
       const suffix = crypto.randomBytes(2).toString('hex').toUpperCase();
       const syncHex = crypto.randomBytes(2).toString('hex').toUpperCase();
       const pingMs = Math.max(0.2, Number((Number(process.hrtime.bigint() - startNs) / 1e6).toFixed(2)));
-      const balanceVal = Number(initialBalance) || 10000;
+      const parsedBalance = Number(initialBalance);
+      const balanceVal = Number.isFinite(parsedBalance) && parsedBalance > 0 ? parsedBalance : 10000;
 
       const port: TradePortRecord = {
-        id: `TP-${(region || 'JHB').slice(0, 3).toUpperCase()}-${suffix}`,
-        label: label || 'TradePort Cloud Node',
+        id: `TP-${String(region || 'JHB').slice(0, 3).toUpperCase()}-${suffix}`,
+        label: String(label || 'TradePort Cloud Node').trim().slice(0, 80),
         platform: platform === 'MT4' ? 'MT4' : 'MT5',
-        broker: broker || 'IC Markets Global',
-        server: server || 'ICMarketsSC-Live02',
-        accountLogin: accountLogin || 'UNASSIGNED',
-        eaFile: eaFile || 'TradePort_Gold_V5.ex5',
-        region: region || 'Johannesburg Teraco JHB',
+        broker: String(broker || 'IC Markets Global').trim().slice(0, 64),
+        server: String(server || 'ICMarketsSC-Live02').trim().slice(0, 64),
+        accountLogin: String(accountLogin || 'UNASSIGNED').trim().slice(0, 32),
+        eaFile: String(eaFile || 'TradePort_Gold_V5.ex5').trim().slice(0, 80),
+        region: String(region || 'Johannesburg Teraco JHB').trim().slice(0, 64),
         pingMs,
         status: 'ACTIVE',
-        planTerm: planTerm || '1-Month Fixed',
+        planTerm: String(planTerm || '1-Month Fixed').trim().slice(0, 48),
         expiresOn: expiry.toISOString().slice(0, 10),
         mobileSyncCode: `TP-SYNC-${syncHex}-${platform === 'MT4' ? 'MT4' : 'MT5'}`,
         balance: balanceVal,
@@ -1180,24 +1297,261 @@ void OnTick() {
     }
   });
 
+  app.patch('/api/tradeport/ports/:id', (req, res) => {
+    try {
+      const targetId = String(req.params.id || '').trim();
+      const port = portsStore.find((p) => p.id === targetId);
+      if (!port) {
+        return res.status(404).json({ success: false, error: `Cloud port ${targetId} not found.` });
+      }
+      const { status, eaFile, label } = req.body || {};
+      if (status === 'ACTIVE' || status === 'PAUSED' || status === 'RECONNECTING') {
+        port.status = status;
+      }
+      if (typeof eaFile === 'string' && eaFile.trim()) {
+        port.eaFile = eaFile.trim().slice(0, 80);
+      }
+      if (typeof label === 'string' && label.trim()) {
+        port.label = label.trim().slice(0, 80);
+      }
+      return res.json({ success: true, port });
+    } catch (err: unknown) {
+      return res.status(500).json({ success: false, error: (err as Error).message });
+    }
+  });
+
+  app.delete('/api/tradeport/ports/:id', (req, res) => {
+    try {
+      const targetId = String(req.params.id || '').trim();
+      const idx = portsStore.findIndex((p) => p.id === targetId);
+      if (idx === -1) {
+        return res.status(404).json({ success: false, error: `Cloud port ${targetId} not found.` });
+      }
+      const [removed] = portsStore.splice(idx, 1);
+      return res.json({ success: true, deletedId: removed.id });
+    } catch (err: unknown) {
+      return res.status(500).json({ success: false, error: (err as Error).message });
+    }
+  });
+
   // TradePort EA: Affiliate Settlement Reference
   app.post('/api/tradeport/affiliate-payout', (req, res) => {
     try {
-      const { asset, walletAddress, amountUsd } = req.body;
-      if (!walletAddress || !amountUsd) {
-        return res.status(400).json({ success: false, error: 'Wallet address and amount are required' });
+      const { asset, walletAddress, amountUsd } = req.body || {};
+      const cleanWallet = typeof walletAddress === 'string' ? walletAddress.trim() : '';
+      const numericAmount = Number(amountUsd);
+      if (cleanWallet.length < 8) {
+        return res.status(400).json({ success: false, error: 'Valid destination wallet address is required' });
+      }
+      if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 1000000) {
+        return res.status(400).json({ success: false, error: 'Payout amount must be a positive USD figure' });
       }
       const txRef = `TX-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
       return res.json({
         success: true,
         txRef,
-        asset: asset || 'USDT (TRC20)',
-        amountUsd: Number(amountUsd),
-        message: `Queued $${Number(amountUsd).toFixed(2)} settlement via ${asset || 'USDT (TRC20)'} (${txRef}) to ${String(walletAddress).slice(0, 12)}...`,
+        asset: String(asset || 'USDT (TRC20)').slice(0, 32),
+        amountUsd: numericAmount,
+        message: `Queued $${numericAmount.toFixed(2)} settlement via ${String(asset || 'USDT (TRC20)')} (${txRef}) to ${cleanWallet.slice(0, 12)}...`,
         timestamp: new Date().toISOString(),
       });
     } catch (err: unknown) {
       return res.status(500).json({ success: false, error: (err as Error).message });
+    }
+  });
+
+  // AI Chart Screenshot Scanner & Structured Trade Builder (@google/genai)
+  app.post('/api/ai/scan-chart', async (req, res) => {
+    const tStart = performance.now();
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        return res.status(503).json({
+          success: false,
+          error:
+            'GEMINI_API_KEY is not configured on the server. Add GEMINI_API_KEY in AI Studio Settings > Secrets to enable live AI chart screenshot scanning.',
+        });
+      }
+
+      const { imageBase64, mimeType, accountBalance, riskPct, notes } = req.body || {};
+
+      const allowedMimes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+      const cleanMime = typeof mimeType === 'string' ? mimeType.trim().toLowerCase() : '';
+      if (!allowedMimes.includes(cleanMime)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Unsupported image MIME type. Please upload PNG, JPEG, WEBP, or GIF.',
+        });
+      }
+
+      if (typeof imageBase64 !== 'string' || imageBase64.trim().length < 32) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid or empty chart screenshot payload.',
+        });
+      }
+
+      const strippedBase64 = imageBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '').trim();
+      const approxBytes = Math.floor((strippedBase64.length * 3) / 4);
+      if (approxBytes > 8 * 1024 * 1024) {
+        return res.status(413).json({
+          success: false,
+          error: 'Chart screenshot exceeds maximum 8 MB decoded payload limit.',
+        });
+      }
+
+      const safeBalance =
+        typeof accountBalance === 'number' && Number.isFinite(accountBalance) && accountBalance > 0
+          ? accountBalance
+          : 100000;
+      const safeRiskPct =
+        typeof riskPct === 'number' && Number.isFinite(riskPct) && riskPct > 0 && riskPct <= 10
+          ? riskPct
+          : 1.0;
+      const safeNotes = typeof notes === 'string' ? notes.slice(0, 500) : '';
+
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          },
+        },
+      });
+
+      const prompt = [
+        'Analyze this trading chart screenshot as a senior institutional Smart Money Concepts (SMC) & quantitative execution desk analyst.',
+        `Account Equity: $${safeBalance.toFixed(2)}, Target Risk Per Trade: ${safeRiskPct.toFixed(2)}% ($${((safeBalance * safeRiskPct) / 100).toFixed(2)} max risk).`,
+        safeNotes ? `Trader Session Notes: ${safeNotes}` : '',
+        'Extract exact price coordinates visible on the y-axis, identify market structure (BOS, CHoCH, Order Blocks, Fair Value Gaps, Liquidity Sweeps, Support/Resistance), and produce an actionable trade ticket plan.',
+        'If structure is ambiguous or high-risk chop, set bias to WAIT while still providing nearest breakout/retest trigger levels.',
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: [
+          {
+            inlineData: {
+              mimeType: cleanMime,
+              data: strippedBase64,
+            },
+          },
+          {
+            text: prompt,
+          },
+        ],
+        config: {
+          systemInstruction:
+            'You are an institutional quantitative technical analyst. Always read exact y-axis price ticks from the provided chart screenshot, keep Stop Loss strictly on the opposite side of Entry relative to Take Profit, and output valid structured JSON only.',
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              symbol: { type: Type.STRING, description: 'Detected ticker/pair e.g. XAUUSD, EURUSD, BTCUSD, US30, NAS100' },
+              timeframe: { type: Type.STRING, description: 'Detected timeframe e.g. M5, M15, H1, H4, D1' },
+              bias: { type: Type.STRING, enum: ['BUY', 'SELL', 'WAIT'] },
+              orderType: { type: Type.STRING, enum: ['MARKET', 'LIMIT', 'STOP'] },
+              confidence: { type: Type.NUMBER, description: 'Confidence percentage from 0 to 100' },
+              pattern: { type: Type.STRING, description: 'Concise setup classification e.g. Liquidity Sweep + Bullish OB + FVG' },
+              entryPrice: { type: Type.NUMBER },
+              stopLoss: { type: Type.NUMBER },
+              takeProfit1: { type: Type.NUMBER },
+              takeProfit2: { type: Type.NUMBER },
+              riskReward: { type: Type.STRING, description: 'e.g. 1:3.2' },
+              recommendedLots: { type: Type.NUMBER },
+              keyLevels: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    label: { type: Type.STRING },
+                    price: { type: Type.NUMBER },
+                    type: { type: Type.STRING, enum: ['SUPPORT', 'RESISTANCE', 'LIQUIDITY', 'FVG', 'OB'] },
+                  },
+                  required: ['label', 'price', 'type'],
+                },
+              },
+              rationale: { type: Type.STRING },
+              invalidationReason: { type: Type.STRING },
+            },
+            required: [
+              'symbol',
+              'timeframe',
+              'bias',
+              'orderType',
+              'confidence',
+              'pattern',
+              'entryPrice',
+              'stopLoss',
+              'takeProfit1',
+              'takeProfit2',
+              'riskReward',
+              'recommendedLots',
+              'keyLevels',
+              'rationale',
+              'invalidationReason',
+            ],
+          },
+        },
+      });
+
+      const rawText = response.text;
+      if (!rawText) {
+        return res.status(502).json({
+          success: false,
+          error: 'AI model returned an empty analysis response.',
+        });
+      }
+
+      const sanitizedJson = rawText
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/```\s*$/, '')
+        .trim();
+      const parsed = JSON.parse(sanitizedJson);
+      const clampNum = (v: unknown, fallback = 0) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : fallback;
+      };
+
+      const analysis = {
+        symbol: String(parsed.symbol || 'XAUUSD').toUpperCase().replace(/[^A-Z0-9./_-]/g, '').slice(0, 16) || 'XAUUSD',
+        timeframe: String(parsed.timeframe || 'M15').toUpperCase().slice(0, 10),
+        bias: parsed.bias === 'BUY' || parsed.bias === 'SELL' ? parsed.bias : 'WAIT',
+        orderType: parsed.orderType === 'LIMIT' || parsed.orderType === 'STOP' ? parsed.orderType : 'MARKET',
+        confidence: Math.max(1, Math.min(99, Math.round(clampNum(parsed.confidence, 75)))),
+        pattern: String(parsed.pattern || 'Price Action Structure').slice(0, 120),
+        entryPrice: clampNum(parsed.entryPrice, 0),
+        stopLoss: clampNum(parsed.stopLoss, 0),
+        takeProfit1: clampNum(parsed.takeProfit1, 0),
+        takeProfit2: clampNum(parsed.takeProfit2, 0),
+        riskReward: String(parsed.riskReward || '1:2.5').slice(0, 24),
+        recommendedLots: Math.max(0.01, Math.min(25, Number(clampNum(parsed.recommendedLots, 0.25).toFixed(2)))),
+        keyLevels: Array.isArray(parsed.keyLevels)
+          ? parsed.keyLevels.slice(0, 6).map((lv: Record<string, unknown>) => ({
+              label: String(lv?.label || 'Key Level').slice(0, 60),
+              price: clampNum(lv?.price, 0),
+              type: String(lv?.type || 'LIQUIDITY').toUpperCase().slice(0, 16),
+            }))
+          : [],
+        rationale: String(parsed.rationale || '').slice(0, 600),
+        invalidationReason: String(parsed.invalidationReason || '').slice(0, 300),
+      };
+
+      const latencyMs = Number((performance.now() - tStart).toFixed(1));
+      return res.json({
+        success: true,
+        model: 'gemini-4-hydrogen',
+        latencyMs,
+        analysis,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Chart analysis failed.';
+      return res.status(500).json({
+        success: false,
+        error: msg,
+      });
     }
   });
 

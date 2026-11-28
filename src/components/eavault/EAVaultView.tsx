@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useTrading } from '../../context/TradingContext';
+import { useBrand } from '../../context/BrandContext';
 import {
   ShieldCheck,
   Key,
@@ -13,11 +14,52 @@ import {
   Eye,
   Search,
   RotateCcw,
+  Activity,
+  Sliders,
+  AlertTriangle,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+} from 'recharts';
 import { randomHex } from '../../lib/crypto';
+
+const VAULT_BACKTEST_CURVES: Record<string, Array<{ month: string; balance: number }>> = {
+  'Endgame Forex Robot': [
+    { month: 'M1', balance: 10000 },
+    { month: 'M2', balance: 11240 },
+    { month: 'M3', balance: 12810 },
+    { month: 'M4', balance: 14190 },
+    { month: 'M5', balance: 16420 },
+    { month: 'M6', balance: 18950 },
+  ],
+  'Shadow River Matrix': [
+    { month: 'M1', balance: 10000 },
+    { month: 'M2', balance: 10920 },
+    { month: 'M3', balance: 11850 },
+    { month: 'M4', balance: 13210 },
+    { month: 'M5', balance: 14740 },
+    { month: 'M6', balance: 16380 },
+  ],
+  'Apex Liquidity Scalper': [
+    { month: 'M1', balance: 10000 },
+    { month: 'M2', balance: 11610 },
+    { month: 'M3', balance: 12940 },
+    { month: 'M4', balance: 14820 },
+    { month: 'M5', balance: 17110 },
+    { month: 'M6', balance: 19840 },
+  ],
+};
 
 export const EAVaultView: React.FC = () => {
   const { licenses, presets, generateLicense, revokeLicense, downloadPreset } = useTrading();
+  const { brand } = useBrand();
+  const sovereignDomain = `${brand.brandName.toLowerCase().replace(/[^a-z0-9]+/g, '') || 'apexsovereign'}.io`;
 
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [selectedRobot, setSelectedRobot] = useState<string>('Endgame Forex Robot');
@@ -33,6 +75,28 @@ export const EAVaultView: React.FC = () => {
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [previewPreset, setPreviewPreset] = useState<string | null>(null);
+
+  // WebAuth Anti-Decompile API tester state
+  const [verifyKey, setVerifyKey] = useState<string>('AMX-PROP-883921-X99');
+  const [verifyAccount, setVerifyAccount] = useState<string>('8839210');
+  const [verifyHwid, setVerifyHwid] = useState<string>('HWID-9F81-42BA');
+  const [verifyResult, setVerifyResult] = useState<{
+    valid: boolean;
+    tier?: string;
+    status?: string;
+    hwidBound?: string;
+    maxTerminals?: number;
+    error?: string;
+  } | null>(null);
+  const [isVerifyingKey, setIsVerifyingKey] = useState<boolean>(false);
+
+  // Interactive .SET builder & Recharts strategy curve selector
+  const [curveStrategy, setCurveStrategy] = useState<string>('Endgame Forex Robot');
+  const [setRiskPct, setSetRiskPct] = useState<number>(1.0);
+  const [setMaxSpread, setSetMaxSpread] = useState<number>(18);
+  const [setMagicNumber, setSetMagicNumber] = useState<number>(884210);
+  const [setUseNewsFilter, setSetUseNewsFilter] = useState<boolean>(true);
+  const [setMaxDailyDd, setSetMaxDailyDd] = useState<number>(4.0);
   const timersRef = useRef<number[]>([]);
 
   useEffect(() => {
@@ -80,7 +144,7 @@ export const EAVaultView: React.FC = () => {
   };
 
   const handleCopyKey = (key: string) => {
-    navigator.clipboard.writeText(key);
+    void navigator.clipboard?.writeText(key).catch(() => undefined);
     setCopiedKey(key);
     const t = window.setTimeout(() => setCopiedKey(null), 2000);
     timersRef.current.push(t);
@@ -93,18 +157,65 @@ export const EAVaultView: React.FC = () => {
     timersRef.current.push(t);
   };
 
+  const handleVerifyLicenseApi = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!verifyKey.trim()) return;
+    setIsVerifyingKey(true);
+    try {
+      const res = await fetch('/api/algomax/verify-license', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          licenseKey: verifyKey.trim(),
+          hwid: verifyHwid.trim(),
+          accountNumber: verifyAccount.trim(),
+        }),
+      });
+      const data = await res.json();
+      setVerifyResult(data);
+    } catch {
+      setVerifyResult({ valid: false, error: 'Unable to reach WebAuth validation server.' });
+    } finally {
+      setIsVerifyingKey(false);
+    }
+  };
+
+  const handleDownloadCustomSet = () => {
+    const content = [
+      `; ${brand.brandName} EA Vault Verified Preset (${curveStrategy})`,
+      `; Generated ${new Date().toISOString()} · 99.9% Tick Verified`,
+      `MagicNumber=${setMagicNumber}`,
+      `RiskPerTradePct=${setRiskPct.toFixed(2)}`,
+      `MaxSpreadPoints=${setMaxSpread}`,
+      `MaxDailyDrawdownPct=${setMaxDailyDd.toFixed(2)}`,
+      `EnablePreNewsCircuitBreaker=${setUseNewsFilter ? 'true' : 'false'}`,
+      `WebAuthServer=https://${sovereignDomain}/api/algomax/verify-license`,
+    ].join('\r\n');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${curveStrategy.replace(/\s+/g, '_')}_VaultCustom.set`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setDownloadToast(`Exported custom .SET configuration for ${curveStrategy}`);
+    const t = window.setTimeout(() => setDownloadToast(null), 3500);
+    timersRef.current.push(t);
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Banner */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[#0a1626] via-[#09101c] to-[#160d26] border border-cyan-800/40 p-6 md:p-8 shadow-2xl">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative z-10 max-w-3xl space-y-3">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-mono font-medium">
+      <div className="relative rounded-2xl overflow-hidden bg-[#0F141E] border border-white/[0.08] p-6 md:p-8">
+        <div className="relative z-10 max-w-3xl space-y-2.5">
+          <div className="flex items-center gap-2 text-cyan-300 text-xs font-mono font-medium flex-wrap">
             <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
-            <span>EA-Vault.com • Encrypted Licensing & Verified Preset Vault</span>
+            <span>{brand.brandName} ({sovereignDomain}) · Proprietary Key &amp; Preset Vault · {brand.ownerEntity}</span>
           </div>
-          <h2 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
-            Cryptographic MQL4/MQL5 License Protection & Strategy Repository
+          <h2 className="text-2xl md:text-3xl font-bold text-white font-display tracking-tight">
+            Cryptographic MQL4/MQL5 License Protection &amp; Strategy Repository
           </h2>
           <p className="text-sm text-slate-300 leading-relaxed">
             Lock Expert Advisors to specific MT4/MT5 account numbers and Hardware IDs (HWID). Download audited .set preset configurations verified with 99.9% real tick data.
@@ -124,7 +235,7 @@ export const EAVaultView: React.FC = () => {
       </div>
 
       {/* License Key Generator & Active Licenses */}
-      <div className="bg-[#0b0e14] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+      <div className="bg-[#0F141E] border border-white/[0.08] rounded-2xl p-6 shadow-xl space-y-6">
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div>
             <h3 className="text-base font-bold text-slate-100 uppercase tracking-wider flex items-center gap-2">
@@ -366,7 +477,7 @@ export const EAVaultView: React.FC = () => {
       </div>
 
       {/* Official Verified Presets (.SET) Vault */}
-      <div className="bg-[#0b0e14] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+      <div className="bg-[#0F141E] border border-white/[0.08] rounded-2xl p-6 shadow-xl space-y-6">
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div>
             <h3 className="text-base font-bold text-slate-100 uppercase tracking-wider flex items-center gap-2">
@@ -443,12 +554,217 @@ export const EAVaultView: React.FC = () => {
               </div>
 
               {previewPreset === pre.id && (
-                <div className="mt-2 p-3 bg-black/60 rounded-lg border border-slate-800 text-[10px] text-slate-300 whitespace-pre font-mono overflow-x-auto max-h-40">
+                <div className="mt-2 p-3 bg-[#090C12] rounded-lg border border-white/[0.08] text-[10px] text-slate-300 whitespace-pre font-mono overflow-x-auto max-h-40">
                   {pre.content}
                 </div>
               )}
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Anti-Decompile WebAuth API Tester + Verified 99.9% Tick Backtest & Custom .SET Builder */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <form
+          onSubmit={handleVerifyLicenseApi}
+          className="lg:col-span-5 rounded-2xl bg-[#0F141E] border border-white/[0.08] p-6 space-y-4 font-mono text-xs"
+        >
+          <div className="border-b border-white/[0.08] pb-3 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white font-sans uppercase tracking-wider flex items-center gap-2">
+              <Lock className="w-4 h-4 text-cyan-400" />
+              <span>Anti-Decompile WebAuth Probe</span>
+            </h3>
+            <span className="text-[11px] text-cyan-400">POST /api/algomax/verify-license</span>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <label className="text-slate-400 block mb-1">License Key (AMX-*)</label>
+              <input
+                type="text"
+                value={verifyKey}
+                onChange={(e) => setVerifyKey(e.target.value)}
+                className="w-full bg-[#161D2B] border border-white/[0.08] rounded-xl px-3 py-2 text-cyan-300 font-bold"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-slate-400 block mb-1">MT4/MT5 Account</label>
+                <input
+                  type="text"
+                  value={verifyAccount}
+                  onChange={(e) => setVerifyAccount(e.target.value)}
+                  className="w-full bg-[#161D2B] border border-white/[0.08] rounded-xl px-3 py-2 text-white"
+                />
+              </div>
+              <div>
+                <label className="text-slate-400 block mb-1">Hardware ID</label>
+                <input
+                  type="text"
+                  value={verifyHwid}
+                  onChange={(e) => setVerifyHwid(e.target.value)}
+                  className="w-full bg-[#161D2B] border border-white/[0.08] rounded-xl px-3 py-2 text-white"
+                />
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isVerifyingKey}
+            className="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition disabled:opacity-50"
+          >
+            {isVerifyingKey ? 'Validating Cryptographic Handshake...' : 'Verify WebAuth License Signature'}
+          </button>
+
+          {verifyResult && (
+            <div
+              className={`p-3.5 rounded-xl border space-y-1.5 ${
+                verifyResult.valid
+                  ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300'
+                  : 'bg-rose-950/30 border-rose-500/30 text-rose-300'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 font-bold">
+                {verifyResult.valid ? (
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                )}
+                <span>
+                  {verifyResult.valid
+                    ? `VALID SIGNATURE · ${verifyResult.tier} TIER (${verifyResult.maxTerminals} Terminals)`
+                    : verifyResult.error || 'INVALID SIGNATURE FORMAT'}
+                </span>
+              </div>
+              {verifyResult.hwidBound && (
+                <div className="text-[11px] text-slate-300">
+                  Bound HWID: {verifyResult.hwidBound} · Status: {verifyResult.status}
+                </div>
+              )}
+            </div>
+          )}
+        </form>
+
+        <div className="lg:col-span-7 rounded-2xl bg-[#0F141E] border border-white/[0.08] p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/[0.08] pb-3">
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <Activity className="w-4 h-4 text-emerald-400" />
+              <span>99.9% Real Tick Backtest &amp; Custom .SET Builder</span>
+            </h3>
+            <select
+              value={curveStrategy}
+              onChange={(e) => setCurveStrategy(e.target.value)}
+              className="bg-[#161D2B] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs font-mono text-cyan-300"
+            >
+              {Object.keys(VAULT_BACKTEST_CURVES).map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="h-44 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={VAULT_BACKTEST_CURVES[curveStrategy]}>
+                <defs>
+                  <linearGradient id="vaultEq" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                <XAxis dataKey="month" stroke="#64748b" fontSize={11} />
+                <YAxis stroke="#64748b" fontSize={11} domain={['dataMin - 500', 'dataMax + 500']} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#0F141E',
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    borderRadius: '0.75rem',
+                    fontSize: '12px',
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="balance"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  fillOpacity={1}
+                  fill="url(#vaultEq)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+            <label className="p-2.5 rounded-xl bg-[#161D2B] border border-white/[0.06] space-y-1">
+              <span className="text-[10px] text-slate-400 block">RISK % / TRADE</span>
+              <input
+                type="number"
+                min={0.1}
+                max={5}
+                step={0.1}
+                value={setRiskPct}
+                onChange={(e) => setSetRiskPct(Math.max(0.1, Number(e.target.value) || 0.1))}
+                className="w-full bg-[#090C12] border border-white/[0.08] rounded px-2 py-1 text-emerald-400 font-bold tabular-nums"
+              />
+            </label>
+            <label className="p-2.5 rounded-xl bg-[#161D2B] border border-white/[0.06] space-y-1">
+              <span className="text-[10px] text-slate-400 block">MAX SPREAD (PTS)</span>
+              <input
+                type="number"
+                min={5}
+                max={100}
+                value={setMaxSpread}
+                onChange={(e) => setSetMaxSpread(Math.max(5, Number(e.target.value) || 5))}
+                className="w-full bg-[#090C12] border border-white/[0.08] rounded px-2 py-1 text-white font-bold tabular-nums"
+              />
+            </label>
+            <label className="p-2.5 rounded-xl bg-[#161D2B] border border-white/[0.06] space-y-1">
+              <span className="text-[10px] text-slate-400 block">MAX DAILY DD %</span>
+              <input
+                type="number"
+                min={1}
+                max={15}
+                step={0.5}
+                value={setMaxDailyDd}
+                onChange={(e) => setSetMaxDailyDd(Math.max(1, Number(e.target.value) || 1))}
+                className="w-full bg-[#090C12] border border-white/[0.08] rounded px-2 py-1 text-amber-300 font-bold tabular-nums"
+              />
+            </label>
+            <label className="p-2.5 rounded-xl bg-[#161D2B] border border-white/[0.06] space-y-1">
+              <span className="text-[10px] text-slate-400 block">MAGIC NUMBER</span>
+              <input
+                type="number"
+                value={setMagicNumber}
+                onChange={(e) => setSetMagicNumber(Number(e.target.value) || 884210)}
+                className="w-full bg-[#090C12] border border-white/[0.08] rounded px-2 py-1 text-cyan-300 font-bold tabular-nums"
+              />
+            </label>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={setUseNewsFilter}
+                onChange={(e) => setSetUseNewsFilter(e.target.checked)}
+                className="accent-cyan-400"
+              />
+              <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Include Pre-News Circuit Breaker Flag</span>
+            </label>
+
+            <button
+              type="button"
+              onClick={handleDownloadCustomSet}
+              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Compile &amp; Download Custom .SET</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -6,9 +6,21 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Helper functions
+    // Core helpers
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
     function isSignedIn() {
       return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
     }
 
     function isOwner(userId) {
@@ -26,41 +38,68 @@ service cloud.firestore {
       return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    function isValidLicense(data) {
+    function isValidAdmin(data, adminId) {
+      return data.keys().hasAll(['uid', 'role']) &&
+        data.keys().hasOnly(['uid', 'email', 'role', 'createdAt']) &&
+        data.uid is string && data.uid == adminId && data.uid.size() > 0 && data.uid.size() <= 128 &&
+        data.role in ['SUPER_ADMIN', 'ADMIN'] &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 128)) &&
+        (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 40));
+    }
+
+    function isValidLicense(data, licenseId) {
       return data.keys().hasAll(['id', 'key', 'robotName', 'accountNumber', 'clientName', 'status']) &&
         data.keys().hasOnly([
           'id', 'key', 'robotName', 'accountNumber', 'hwid', 'clientName',
           'clientEmail', 'broker', 'status', 'createdAt', 'expiresAt',
           'maxAccounts', 'activeAccounts'
         ]) &&
-        data.id is string && data.id.size() <= 128 &&
-        data.key is string && data.key.size() <= 128 &&
-        data.robotName is string && data.robotName.size() <= 64 &&
-        data.accountNumber is string && data.accountNumber.size() <= 32 &&
-        data.clientName is string && data.clientName.size() <= 128 &&
-        data.status in ['ACTIVE', 'EXPIRED', 'REVOKED', 'PENDING'];
+        data.id is string && data.id == licenseId && data.id.size() > 0 && data.id.size() <= 128 &&
+        data.key is string && data.key.size() > 0 && data.key.size() <= 128 &&
+        data.robotName is string && data.robotName.size() > 0 && data.robotName.size() <= 64 &&
+        data.accountNumber is string && data.accountNumber.size() > 0 && data.accountNumber.size() <= 32 &&
+        data.clientName is string && data.clientName.size() > 0 && data.clientName.size() <= 128 &&
+        data.status in ['ACTIVE', 'EXPIRED', 'REVOKED', 'PENDING'] &&
+        (!('hwid' in data) || (data.hwid is string && data.hwid.size() <= 128)) &&
+        (!('clientEmail' in data) || (data.clientEmail is string && data.clientEmail.size() <= 128)) &&
+        (!('broker' in data) || (data.broker is string && data.broker.size() <= 64)) &&
+        (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 40)) &&
+        (!('expiresAt' in data) || (data.expiresAt is string && data.expiresAt.size() <= 40)) &&
+        (!('maxAccounts' in data) || (data.maxAccounts is number && data.maxAccounts >= 1 && data.maxAccounts <= 1000)) &&
+        (!('activeAccounts' in data) || (data.activeAccounts is number && data.activeAccounts >= 0 && data.activeAccounts <= 1000));
     }
 
-    function isValidTerminal(data) {
+    function isValidTerminal(data, terminalId) {
       return data.keys().hasAll(['id', 'platform', 'broker', 'accountNumber', 'status']) &&
         data.keys().hasOnly([
           'id', 'name', 'platform', 'broker', 'accountNumber', 'server',
           'pingMs', 'status', 'balance', 'equity', 'margin', 'autoTrading', 'lastPing'
         ]) &&
-        data.id is string && data.id.size() <= 128 &&
+        data.id is string && data.id == terminalId && data.id.size() > 0 && data.id.size() <= 128 &&
         data.platform in ['MT4', 'MT5', 'cTrader', 'DXtrade'] &&
-        data.broker is string && data.broker.size() <= 64 &&
-        data.accountNumber is string && data.accountNumber.size() <= 32 &&
-        data.status in ['ONLINE', 'OFFLINE', 'SYNCING', 'ERROR'];
+        data.broker is string && data.broker.size() > 0 && data.broker.size() <= 64 &&
+        data.accountNumber is string && data.accountNumber.size() > 0 && data.accountNumber.size() <= 32 &&
+        data.status in ['ONLINE', 'OFFLINE', 'SYNCING', 'ERROR'] &&
+        (!('name' in data) || (data.name is string && data.name.size() <= 128)) &&
+        (!('server' in data) || (data.server is string && data.server.size() <= 64)) &&
+        (!('pingMs' in data) || (data.pingMs is number && data.pingMs >= 0)) &&
+        (!('balance' in data) || data.balance is number) &&
+        (!('equity' in data) || data.equity is number) &&
+        (!('margin' in data) || data.margin is number) &&
+        (!('autoTrading' in data) || data.autoTrading is bool) &&
+        (!('lastPing' in data) || (data.lastPing is string && data.lastPing.size() <= 40));
     }
 
-    function isValidAuditLog(data) {
+    function isValidAuditLog(data, logId) {
       return data.keys().hasAll(['id', 'adminEmail', 'action', 'timestamp']) &&
         data.keys().hasOnly(['id', 'adminEmail', 'action', 'target', 'details', 'timestamp', 'status']) &&
-        data.id is string && data.id.size() <= 128 &&
-        data.adminEmail is string && data.adminEmail.size() <= 128 &&
-        data.action is string && data.action.size() <= 64 &&
-        data.timestamp is string && data.timestamp.size() <= 40;
+        data.id is string && data.id == logId && data.id.size() > 0 && data.id.size() <= 128 &&
+        data.adminEmail is string && data.adminEmail.size() > 0 && data.adminEmail.size() <= 128 &&
+        data.action is string && data.action.size() > 0 && data.action.size() <= 64 &&
+        data.timestamp is string && data.timestamp.size() > 0 && data.timestamp.size() <= 40 &&
+        (!('target' in data) || (data.target is string && data.target.size() <= 128)) &&
+        (!('details' in data) || (data.details is string && data.details.size() <= 512)) &&
+        (!('status' in data) || (data.status is string && data.status.size() <= 32));
     }
 
     function isValidWorkspace(data, userId) {
@@ -69,9 +108,9 @@ service cloud.firestore {
           'uid', 'updatedAt', 'accountBalance', 'positionsJson',
           'pendingOrdersJson', 'orderHistoryJson', 'licensesJson', 'automatedSettingsJson'
         ]) &&
-        data.uid == userId &&
-        data.updatedAt is string && data.updatedAt.size() <= 40 &&
-        (!('accountBalance' in data) || data.accountBalance is number) &&
+        data.uid is string && data.uid == userId && data.uid.size() > 0 && data.uid.size() <= 128 &&
+        data.updatedAt is string && data.updatedAt.size() > 0 && data.updatedAt.size() <= 40 &&
+        (!('accountBalance' in data) || (data.accountBalance is number && data.accountBalance >= 0)) &&
         (!('positionsJson' in data) || (data.positionsJson is string && data.positionsJson.size() <= 200000)) &&
         (!('pendingOrdersJson' in data) || (data.pendingOrdersJson is string && data.pendingOrdersJson.size() <= 100000)) &&
         (!('orderHistoryJson' in data) || (data.orderHistoryJson is string && data.orderHistoryJson.size() <= 200000)) &&
@@ -79,36 +118,75 @@ service cloud.firestore {
         (!('automatedSettingsJson' in data) || (data.automatedSettingsJson is string && data.automatedSettingsJson.size() <= 50000));
     }
 
-    // Licenses collection: admin full access; verified client can read own email-scoped license
-    match /licenses/{licenseId} {
-      allow get: if isValidId(licenseId) && (isAdmin() || (isSignedIn() && resource.data.clientEmail == request.auth.token.email));
+    // Admins registry: explicit read-only self-check or full admin control
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isOwner(adminId) || isAdmin());
       allow list: if isAdmin();
-      allow create, update: if isAdmin() && isValidId(licenseId) && isValidLicense(request.resource.data);
+      allow create: if isAdmin() && isValidId(adminId) && isValidAdmin(incoming(), adminId);
+      allow update: if isAdmin() && isValidId(adminId) && isValidAdmin(incoming(), adminId) &&
+        incoming().uid == existing().uid &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['email', 'role']);
+      allow delete: if isAdmin() && isValidId(adminId);
+    }
+
+    // Licenses collection: admin full access; email-verified client can read own email-scoped license
+    match /licenses/{licenseId} {
+      allow get: if isValidId(licenseId) && (
+        isAdmin() ||
+        (isVerifiedUser() && existing().clientEmail == request.auth.token.email)
+      );
+      allow list: if isAdmin() || (isVerifiedUser() && existing().clientEmail == request.auth.token.email);
+      allow create: if isAdmin() && isValidId(licenseId) && isValidLicense(incoming(), licenseId);
+      allow update: if isAdmin() && isValidId(licenseId) && isValidLicense(incoming(), licenseId) &&
+        incoming().id == existing().id &&
+        incoming().key == existing().key &&
+        (!('createdAt' in existing()) || incoming().createdAt == existing().createdAt) &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'robotName', 'accountNumber', 'hwid', 'clientName', 'clientEmail',
+          'broker', 'status', 'expiresAt', 'maxAccounts', 'activeAccounts'
+        ]);
       allow delete: if isAdmin() && isValidId(licenseId);
     }
 
     // Terminals collection: admin fleet only
     match /terminals/{terminalId} {
-      allow get, list: if isAdmin() && isValidId(terminalId);
-      allow create, update: if isAdmin() && isValidId(terminalId) && isValidTerminal(request.resource.data);
+      allow get: if isAdmin() && isValidId(terminalId);
+      allow list: if isAdmin();
+      allow create: if isAdmin() && isValidId(terminalId) && isValidTerminal(incoming(), terminalId);
+      allow update: if isAdmin() && isValidId(terminalId) && isValidTerminal(incoming(), terminalId) &&
+        incoming().id == existing().id &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'platform', 'broker', 'accountNumber', 'server',
+          'pingMs', 'status', 'balance', 'equity', 'margin', 'autoTrading', 'lastPing'
+        ]);
       allow delete: if isAdmin() && isValidId(terminalId);
     }
 
-    // Audit logs collection: immutable audit trail; admin can read/manage, signed-in user can append own log
+    // Audit logs collection: immutable audit trail; admin can read/manage, verified signed-in user can append own log
     match /audit_logs/{logId} {
-      allow get: if isValidId(logId) && (isAdmin() || (isSignedIn() && resource.data.adminEmail == request.auth.token.email));
-      allow list: if isAdmin();
-      allow create: if isSignedIn() && isValidId(logId) && isValidAuditLog(request.resource.data) &&
-        (isAdmin() || request.resource.data.adminEmail == request.auth.token.email);
-      allow update, delete: if isAdmin() && isValidId(logId);
+      allow get: if isValidId(logId) && (
+        isAdmin() ||
+        (isVerifiedUser() && existing().adminEmail == request.auth.token.email)
+      );
+      allow list: if isAdmin() || (isVerifiedUser() && existing().adminEmail == request.auth.token.email);
+      allow create: if isVerifiedUser() && isValidId(logId) && isValidAuditLog(incoming(), logId) &&
+        (isAdmin() || incoming().adminEmail == request.auth.token.email);
+      allow update, delete: if isAdmin() && isValidId(logId) &&
+        incoming().id == existing().id &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'details']);
     }
 
     // Per-user workspaces: strict owner-only isolation
     match /users/{userId}/workspaces/{workspaceId} {
-      allow get, list: if isOwner(userId) && isValidId(workspaceId);
-      allow create: if isOwner(userId) && isValidId(workspaceId) && isValidWorkspace(request.resource.data, userId);
-      allow update: if isOwner(userId) && isValidId(workspaceId) && isValidWorkspace(request.resource.data, userId) &&
-        request.resource.data.uid == resource.data.uid;
+      allow get: if isOwner(userId) && isValidId(workspaceId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidId(workspaceId) && isValidWorkspace(incoming(), userId);
+      allow update: if isOwner(userId) && isValidId(workspaceId) && isValidWorkspace(incoming(), userId) &&
+        incoming().uid == existing().uid &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'updatedAt', 'accountBalance', 'positionsJson', 'pendingOrdersJson',
+          'orderHistoryJson', 'licensesJson', 'automatedSettingsJson'
+        ]);
       allow delete: if isOwner(userId) && isValidId(workspaceId);
     }
   }

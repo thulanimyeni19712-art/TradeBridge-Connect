@@ -24,6 +24,7 @@ import {
   Send,
   Lock,
   Loader2,
+  X,
 } from 'lucide-react';
 
 export const AviatorPredictorView: React.FC = () => {
@@ -88,20 +89,20 @@ export const AviatorPredictorView: React.FC = () => {
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-12">
       {/* Top Bookmaker & ELO Status Banner with 5-Second Polling Indicator */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#0a0d14] border border-amber-500/20 rounded-2xl p-3 sm:p-4 shadow-xl">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#0F141E] border border-white/[0.08] rounded-2xl p-3 sm:p-4">
         {/* Bookmaker Selector Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
           {SA_BOOKMAKERS.map((bm) => (
             <button
               key={bm.id}
               onClick={() => setActiveBookmaker(bm.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-orbitron font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-sans font-bold transition-all shrink-0 flex items-center gap-1.5 ${
                 activeBookmaker === bm.id
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-[0_0_15px_rgba(232,185,35,0.25)]'
-                  : 'bg-slate-900/60 text-slate-400 hover:text-slate-200 border border-slate-800'
+                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/40'
+                  : 'bg-[#161D2B] text-slate-400 hover:text-slate-200 border border-white/[0.06]'
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
               <span>{bm.id}</span>
             </button>
           ))}
@@ -117,10 +118,10 @@ export const AviatorPredictorView: React.FC = () => {
               }`}
             />
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider font-orbitron">
+              <span className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider font-sans">
                 {isPolling ? 'SYNCING...' : 'LIVE 5s'}
               </span>
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
               <span className="text-[10px] text-slate-400 font-mono hidden md:inline tabular-nums">
                 T-{pollCountdown}s (#{syncCount})
               </span>
@@ -129,7 +130,7 @@ export const AviatorPredictorView: React.FC = () => {
 
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-900/80 border border-slate-800 text-xs font-mono tabular-nums">
             <span className="text-slate-400 text-[10px]">ELO:</span>
-            <span className="font-bold text-amber-400 font-orbitron">{currentElo}</span>
+            <span className="font-bold text-amber-400 tabular-nums">{currentElo}</span>
             <span className={`text-[10px] font-bold ${eloChange >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
               ({eloChange >= 0 ? '+' : ''}{eloChange})
             </span>
@@ -145,7 +146,7 @@ export const AviatorPredictorView: React.FC = () => {
 
           <button
             onClick={() => setIsConnectModalOpen(true)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-orbitron font-bold border transition flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-sans font-bold border transition flex items-center gap-1.5 ${
               isConnected
                 ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
                 : 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
@@ -159,21 +160,21 @@ export const AviatorPredictorView: React.FC = () => {
 
       {/* Recent Multipliers Ribbon */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 px-1">
-        <span className="text-[10px] font-orbitron text-slate-500 uppercase tracking-widest shrink-0 mr-1">
+        <span className="text-[10px] font-sans font-bold text-slate-500 uppercase tracking-widest shrink-0 mr-1">
           PAST ROUNDS:
         </span>
         {rounds.slice(0, 16).map((r, idx) => {
-          const isPink = r.multiplier >= 10.0;
-          const isPurple = r.multiplier >= 2.0 && r.multiplier < 10.0;
+          const isHigh = r.multiplier >= 10.0;
+          const isMid = r.multiplier >= 2.0 && r.multiplier < 10.0;
           return (
             <div
               key={`${r.id}-${idx}`}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-orbitron font-extrabold shrink-0 border transition-transform hover:scale-110 cursor-pointer ${
-                isPink
-                  ? 'bg-pink-500/20 text-pink-300 border-pink-500/40 shadow-[0_0_10px_rgba(236,72,153,0.3)]'
-                  : isPurple
-                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-                  : 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-mono tabular-nums font-bold shrink-0 border transition hover:border-white/25 cursor-pointer ${
+                isHigh
+                  ? 'bg-rose-500/15 text-rose-300 border-rose-500/35'
+                  : isMid
+                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/35'
+                  : 'bg-cyan-500/10 text-cyan-300 border-cyan-500/25'
               }`}
             >
               {r.multiplier.toFixed(2)}x
@@ -186,12 +187,9 @@ export const AviatorPredictorView: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left & Center Stage: Aviator Flight Canvas (7 cols) */}
         <div className="lg:col-span-7 space-y-4">
-          <div className="relative h-88 sm:h-96 w-full rounded-3xl bg-gradient-to-b from-[#080d19] via-[#050811] to-[#020408] border border-amber-500/30 overflow-hidden shadow-[0_0_50px_rgba(232,185,35,0.15)] flex flex-col justify-between p-4 hud-bracket-gold relative">
-            {/* Fine Scanlines Overlay & Ambient HUD Grid */}
-            <div className="absolute inset-0 scanlines opacity-25 pointer-events-none" />
-            <div className="absolute inset-0 hud-grid opacity-40 pointer-events-none" />
+          <div className="relative h-88 sm:h-96 w-full rounded-2xl bg-[#090C12] border border-white/[0.08] overflow-hidden flex flex-col justify-between p-4">
 
-            {/* Concentric Altitude Sonar Radar Rings */}
+            {/* Concentric Altitude Radar Rings */}
             <div className="absolute -left-20 -bottom-20 w-[600px] h-[600px] rounded-full border border-amber-500/10 pointer-events-none flex items-center justify-center">
               <div className="w-[450px] h-[450px] rounded-full border border-dashed border-amber-500/15 flex items-center justify-center">
                 <div className="w-[300px] h-[300px] rounded-full border border-amber-500/20 flex items-center justify-center">
@@ -203,7 +201,7 @@ export const AviatorPredictorView: React.FC = () => {
             {/* Top Flight Canvas Telemetry Bar */}
             <div className="flex items-center justify-between z-10 font-mono text-[11px]">
               <div className="flex items-center gap-2">
-                <span className="px-2.5 py-1 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 font-orbitron text-[10px] font-black shadow-sm">
+                <span className="px-2.5 py-1 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 font-sans text-[10px] font-black shadow-sm">
                   {bookmakerInfo.name.toUpperCase()}
                 </span>
                 <span className="text-[10px] text-slate-400 hidden sm:inline">
@@ -224,15 +222,15 @@ export const AviatorPredictorView: React.FC = () => {
                 </div>
 
                 <span
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-orbitron text-[10px] font-extrabold border ${
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-sans text-[10px] font-bold border ${
                     flightStatus === 'FLYING'
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.3)]'
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
                       : flightStatus === 'CRASHED'
-                      ? 'bg-rose-500/20 text-rose-300 border-rose-500/50 shadow-[0_0_15px_rgba(244,63,94,0.3)]'
-                      : 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                      ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                      : 'bg-amber-500/15 text-amber-300 border-amber-500/35'
                   }`}
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-current animate-ping" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-current" />
                   <span>{flightStatus}</span>
                 </span>
               </div>
@@ -248,13 +246,13 @@ export const AviatorPredictorView: React.FC = () => {
               </defs>
 
               {/* Dynamic Altitude Reference Arcs */}
-              <text x="25" y="80" fill="rgba(232, 185, 35, 0.3)" fontSize="10" fontFamily="Orbitron">10.00x STRATOSPHERE</text>
+              <text x="25" y="80" fill="rgba(232, 185, 35, 0.3)" fontSize="10" fontFamily="'Plus Jakarta Sans', sans-serif">10.00x STRATOSPHERE</text>
               <line x1="15" y1="85" x2="95%" y2="85" stroke="rgba(232, 185, 35, 0.12)" strokeDasharray="4 6" />
 
-              <text x="25" y="160" fill="rgba(6, 182, 212, 0.3)" fontSize="10" fontFamily="Orbitron">5.00x MESOSPHERE</text>
+              <text x="25" y="160" fill="rgba(6, 182, 212, 0.3)" fontSize="10" fontFamily="'Plus Jakarta Sans', sans-serif">5.00x MESOSPHERE</text>
               <line x1="15" y1="165" x2="95%" y2="165" stroke="rgba(6, 182, 212, 0.12)" strokeDasharray="4 6" />
 
-              <text x="25" y="240" fill="rgba(16, 185, 129, 0.3)" fontSize="10" fontFamily="Orbitron">2.00x SAFE ORBIT</text>
+              <text x="25" y="240" fill="rgba(16, 185, 129, 0.3)" fontSize="10" fontFamily="'Plus Jakarta Sans', sans-serif">2.00x SAFE ORBIT</text>
               <line x1="15" y1="245" x2="95%" y2="245" stroke="rgba(16, 185, 129, 0.12)" strokeDasharray="4 6" />
 
               {/* Parabolic flight trajectory path */}
@@ -287,8 +285,8 @@ export const AviatorPredictorView: React.FC = () => {
                 }}
               >
                 <div className="relative">
-                  {/* Supersonic Shockwave Ring when passing 2x, 5x, 10x */}
-                  <div className="absolute -inset-4 rounded-full border border-cyan-400/50 animate-ping pointer-events-none" />
+                  {/* Supersonic Altitude Ring */}
+                  <div className="absolute -inset-4 rounded-full border border-cyan-400/40 pointer-events-none" />
 
                   {/* Fighter Jet Fuselage */}
                   <div
@@ -305,8 +303,8 @@ export const AviatorPredictorView: React.FC = () => {
                     </svg>
                   </div>
 
-                  {/* Jet Exhaust Afterburner Particle Flare */}
-                  <div className="absolute top-1/2 -left-8 -translate-y-1/2 w-10 h-3 bg-gradient-to-l from-amber-400 via-rose-500 to-transparent rounded-full blur-[1px] animate-afterburner" />
+                  {/* Jet Exhaust Flare */}
+                  <div className="absolute top-1/2 -left-8 -translate-y-1/2 w-10 h-3 bg-gradient-to-l from-amber-400 via-rose-500 to-transparent rounded-full blur-[1px]" />
                 </div>
               </div>
             )}
@@ -315,43 +313,43 @@ export const AviatorPredictorView: React.FC = () => {
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
               {flightStatus === 'WAITING' ? (
                 <div className="text-center space-y-2">
-                  <p className="text-xs font-orbitron tracking-widest text-slate-400 uppercase">
+                  <p className="text-xs font-sans font-bold tracking-widest text-slate-400 uppercase">
                     NEXT LAUNCH SEQUENCE
                   </p>
-                  <div className="text-6xl sm:text-7xl font-black font-orbitron text-amber-400 text-glow-gold animate-pulse tabular-nums">
+                  <div className="text-6xl sm:text-7xl font-black font-mono text-amber-400 tabular-nums">
                     {countdownSeconds}s
                   </div>
                   <div className="flex items-center justify-center gap-1.5 text-xs text-slate-400 font-mono">
-                    <Cpu className="w-3.5 h-3.5 text-cyan-400 animate-spin" />
+                    <Cpu className="w-3.5 h-3.5 text-cyan-400" />
                     <span>SYNCHRONIZING PRNG SHA-256 SEEDS...</span>
                   </div>
                 </div>
               ) : flightStatus === 'FLYING' ? (
                 <div className="text-center space-y-0.5">
                   <div
-                    className={`text-6xl sm:text-8xl font-black font-orbitron tracking-tight transition-colors tabular-nums ${
+                    className={`text-6xl sm:text-8xl font-black font-mono tracking-tight transition-colors tabular-nums ${
                       currentMultiplier >= 10
-                        ? 'text-pink-400 text-glow-pink'
+                        ? 'text-rose-400'
                         : currentMultiplier >= 5
-                        ? 'text-purple-400 text-glow-cyan'
-                        : 'text-white text-glow-gold'
+                        ? 'text-amber-400'
+                        : 'text-white'
                     }`}
                   >
                     {currentMultiplier.toFixed(2)}x
                   </div>
-                  <p className="text-xs font-orbitron text-emerald-400 tracking-widest uppercase tabular-nums">
-                    MACH {(1.0 + currentMultiplier * 0.4).toFixed(1)} • {currentMultiplier >= 10 ? 'PINK MOONSHOT' : 'SUPERCRUISE ACTIVE'}
+                  <p className="text-xs font-mono text-emerald-400 tracking-widest uppercase tabular-nums">
+                    MACH {(1.0 + currentMultiplier * 0.4).toFixed(1)} • {currentMultiplier >= 10 ? 'PEAK MOONSHOT' : 'SUPERCRUISE ACTIVE'}
                   </p>
                 </div>
               ) : (
                 <div className="text-center space-y-1">
-                  <div className="text-rose-500 text-xs font-orbitron font-extrabold tracking-widest uppercase">
+                  <div className="text-rose-500 text-xs font-sans font-extrabold tracking-widest uppercase">
                     FLEW AWAY @
                   </div>
-                  <div className="text-6xl sm:text-8xl font-black font-orbitron text-rose-500 text-glow-red tabular-nums">
+                  <div className="text-6xl sm:text-8xl font-black font-mono text-rose-500 tabular-nums">
                     {currentMultiplier.toFixed(2)}x
                   </div>
-                  <p className="text-xs font-orbitron text-slate-400 uppercase">
+                  <p className="text-xs font-sans text-slate-400 uppercase">
                     ROUND PROVABLY VERIFIED • COMPUTING NEXT ODDS
                   </p>
                 </div>
@@ -361,13 +359,13 @@ export const AviatorPredictorView: React.FC = () => {
             {/* Bottom Status Ticker */}
             <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 border-t border-slate-800/80 pt-2 z-10">
               <span className="flex items-center gap-1.5">
-                <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                <Radio className="w-3.5 h-3.5 text-emerald-400" />
                 <span>DIRECT API RTT: {measuredRttMs}MS</span>
               </span>
 
               <button
                 onClick={forceNextRound}
-                className="pointer-events-auto text-[10px] font-orbitron text-amber-400 hover:text-amber-300 underline flex items-center gap-1 transition"
+                className="pointer-events-auto text-[10px] font-sans font-bold text-amber-400 hover:text-amber-300 underline flex items-center gap-1 transition"
               >
                 <RotateCcw className="w-3 h-3" />
                 <span>ADVANCE ROUND</span>
@@ -376,8 +374,8 @@ export const AviatorPredictorView: React.FC = () => {
           </div>
 
           {/* South African Bookmakers Live Arbitrage & Odds Matrix Bar */}
-          <div className="bg-[#090d16] border border-slate-800 rounded-2xl p-3 shadow-lg font-mono text-xs">
-            <div className="flex items-center justify-between text-[10px] font-orbitron text-slate-400 uppercase border-b border-slate-800/80 pb-1.5 mb-2">
+          <div className="bg-[#0F141E] border border-white/[0.08] rounded-2xl p-3 font-mono text-xs">
+            <div className="flex items-center justify-between text-[10px] font-sans font-bold text-slate-400 uppercase border-b border-white/[0.06] pb-1.5 mb-2">
               <span className="flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                 <span>SA TOP BOOKMAKERS ODDS MATRIX</span>
@@ -388,17 +386,17 @@ export const AviatorPredictorView: React.FC = () => {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
                 { name: 'Betway SA', rtp: '97.0%', status: 'HIGH VOLUME', est: '2.84x', color: 'text-emerald-400' },
-                { name: 'Hollywoodbets', rtp: '97.0%', status: 'HOT CYCLE', est: '3.12x', color: 'text-purple-400' },
-                { name: 'LottoStar', rtp: '97.2%', status: 'PINK PEAK', est: '4.60x', color: 'text-amber-400' },
+                { name: 'Hollywoodbets', rtp: '97.0%', status: 'HOT CYCLE', est: '3.12x', color: 'text-cyan-400' },
+                { name: 'LottoStar', rtp: '97.2%', status: 'HIGH PEAK', est: '4.60x', color: 'text-amber-400' },
                 { name: 'Easybet', rtp: '96.8%', status: 'ACCUMULATOR', est: '2.50x', color: 'text-blue-400' },
               ].map((bm) => (
-                <div key={bm.name} className="bg-slate-900/60 p-2 rounded-xl border border-slate-800/80 space-y-0.5">
+                <div key={bm.name} className="bg-[#161D2B] p-2 rounded-xl border border-white/[0.06] space-y-0.5">
                   <div className="flex justify-between text-[10px]">
-                    <span className="font-bold text-slate-300 font-orbitron">{bm.name}</span>
+                    <span className="font-bold text-slate-300 font-sans">{bm.name}</span>
                     <span className="text-slate-500">{bm.rtp}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className={`font-bold font-orbitron ${bm.color}`}>{bm.est}</span>
+                    <span className={`font-bold font-mono tabular-nums ${bm.color}`}>{bm.est}</span>
                     <span className="text-[9px] text-slate-400">{bm.status}</span>
                   </div>
                 </div>
@@ -409,9 +407,9 @@ export const AviatorPredictorView: React.FC = () => {
           {/* Dual Betting Cockpit Panels with Ergonomic Quick Chips */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Bet Slot 1 */}
-            <div className="bg-[#0b0e17] border border-slate-800 rounded-2xl p-4 space-y-3 shadow-lg">
+            <div className="bg-[#0F141E] border border-white/[0.08] rounded-2xl p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="font-orbitron font-bold text-xs text-slate-200 flex items-center gap-1.5">
+                <span className="font-sans font-bold text-xs text-slate-200 flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-400" />
                   <span>BET COCKPIT #1</span>
                 </span>
@@ -489,7 +487,7 @@ export const AviatorPredictorView: React.FC = () => {
                         key={mult}
                         type="button"
                         onClick={() => setBetSlot1((prev) => ({ ...prev, autoCashoutMultiplier: mult }))}
-                        className={`flex-1 py-1 rounded-lg text-[10px] font-orbitron font-bold border transition ${
+                        className={`flex-1 py-1 rounded-lg text-[10px] font-mono tabular-nums font-bold border transition ${
                           betSlot1.autoCashoutMultiplier === mult
                             ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
                             : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
@@ -505,20 +503,20 @@ export const AviatorPredictorView: React.FC = () => {
               {/* Action Button */}
               {betSlot1.isPlaced ? (
                 betSlot1.isCashedOut ? (
-                  <div className="w-full py-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-center font-orbitron font-bold text-xs">
+                  <div className="w-full py-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-center font-mono tabular-nums font-bold text-xs">
                     CASHED OUT @ {betSlot1.cashoutPrice?.toFixed(2)}x (+{bookmakerInfo.currency} {betSlot1.pnl})
                   </div>
                 ) : flightStatus === 'FLYING' ? (
                   <button
                     onClick={() => cashoutBet(1)}
-                    className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 active:scale-98 font-orbitron font-black text-slate-950 text-sm shadow-[0_0_25px_rgba(232,185,35,0.5)] transition"
+                    className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 active:scale-98 font-mono tabular-nums font-black text-slate-950 text-sm shadow-[0_0_25px_rgba(232,185,35,0.5)] transition"
                   >
                     CASHOUT {bookmakerInfo.currency} {(betSlot1.amount * currentMultiplier).toFixed(2)} ({currentMultiplier.toFixed(2)}x)
                   </button>
                 ) : (
                   <button
                     onClick={() => cancelBet(1)}
-                    className="w-full py-3 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-orbitron font-bold text-xs transition"
+                    className="w-full py-3 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-sans font-bold text-xs transition"
                   >
                     CANCEL BET
                   </button>
@@ -527,7 +525,7 @@ export const AviatorPredictorView: React.FC = () => {
                 <button
                   onClick={() => placeBet(1)}
                   disabled={flightStatus === 'FLYING'}
-                  className={`w-full py-3.5 rounded-xl font-orbitron font-black text-sm transition shadow-lg ${
+                  className={`w-full py-3.5 rounded-xl font-sans font-black text-sm transition shadow-lg ${
                     flightStatus === 'FLYING'
                       ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                       : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/40 active:scale-98'
@@ -539,9 +537,9 @@ export const AviatorPredictorView: React.FC = () => {
             </div>
 
             {/* Bet Slot 2 */}
-            <div className="bg-[#0b0e17] border border-slate-800 rounded-2xl p-4 space-y-3 shadow-lg">
+            <div className="bg-[#0F141E] border border-white/[0.08] rounded-2xl p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="font-orbitron font-bold text-xs text-slate-200 flex items-center gap-1.5">
+                <span className="font-sans font-bold text-xs text-slate-200 flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-cyan-400" />
                   <span>BET COCKPIT #2</span>
                 </span>
@@ -619,7 +617,7 @@ export const AviatorPredictorView: React.FC = () => {
                         key={mult}
                         type="button"
                         onClick={() => setBetSlot2((prev) => ({ ...prev, autoCashoutMultiplier: mult }))}
-                        className={`flex-1 py-1 rounded-lg text-[10px] font-orbitron font-bold border transition ${
+                        className={`flex-1 py-1 rounded-lg text-[10px] font-mono tabular-nums font-bold border transition ${
                           betSlot2.autoCashoutMultiplier === mult
                             ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
                             : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
@@ -635,20 +633,20 @@ export const AviatorPredictorView: React.FC = () => {
               {/* Action Button */}
               {betSlot2.isPlaced ? (
                 betSlot2.isCashedOut ? (
-                  <div className="w-full py-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-center font-orbitron font-bold text-xs">
+                  <div className="w-full py-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-center font-mono tabular-nums font-bold text-xs">
                     CASHED OUT @ {betSlot2.cashoutPrice?.toFixed(2)}x (+{bookmakerInfo.currency} {betSlot2.pnl})
                   </div>
                 ) : flightStatus === 'FLYING' ? (
                   <button
                     onClick={() => cashoutBet(2)}
-                    className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 active:scale-98 font-orbitron font-black text-slate-950 text-sm shadow-[0_0_25px_rgba(232,185,35,0.5)] transition"
+                    className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 active:scale-98 font-mono tabular-nums font-black text-slate-950 text-sm shadow-[0_0_25px_rgba(232,185,35,0.5)] transition"
                   >
                     CASHOUT {bookmakerInfo.currency} {(betSlot2.amount * currentMultiplier).toFixed(2)} ({currentMultiplier.toFixed(2)}x)
                   </button>
                 ) : (
                   <button
                     onClick={() => cancelBet(2)}
-                    className="w-full py-3 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-orbitron font-bold text-xs transition"
+                    className="w-full py-3 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-sans font-bold text-xs transition"
                   >
                     CANCEL BET
                   </button>
@@ -657,7 +655,7 @@ export const AviatorPredictorView: React.FC = () => {
                 <button
                   onClick={() => placeBet(2)}
                   disabled={flightStatus === 'FLYING'}
-                  className={`w-full py-3.5 rounded-xl font-orbitron font-black text-sm transition shadow-lg ${
+                  className={`w-full py-3.5 rounded-xl font-sans font-black text-sm transition shadow-lg ${
                     flightStatus === 'FLYING'
                       ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                       : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/40 active:scale-98'
@@ -673,25 +671,25 @@ export const AviatorPredictorView: React.FC = () => {
         {/* Right Stage: Statistical AI Predictor Engine (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
           {/* Main AI Forecast Cockpit */}
-          <div className="signal-glass p-5 border border-amber-500/30 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-amber-500/20 pb-3">
+          <div className="bg-[#0F141E] rounded-2xl p-5 border border-white/[0.08] space-y-4">
+            <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-amber-400" />
-                <h3 className="font-orbitron font-black text-sm text-white tracking-widest uppercase">
+                <h3 className="font-sans font-black text-sm text-white tracking-wider uppercase">
                   STATISTICAL PREDICTION v6
                 </h3>
               </div>
-              <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-orbitron text-[9px] font-bold">
+              <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-sans text-[9px] font-bold">
                 {activeSignal.strength} CONFIDENCE
               </span>
             </div>
 
             {/* Target Multiplier Hero Display */}
             <div className="bg-[#060810]/80 border border-slate-800 rounded-2xl p-4 text-center space-y-1">
-              <span className="text-[10px] font-orbitron text-slate-400 uppercase tracking-widest block">
+              <span className="text-[10px] font-sans font-bold text-slate-400 uppercase tracking-widest block">
                 PROJECTED CRASH TARGET
               </span>
-              <div className="text-4xl sm:text-5xl font-black font-orbitron text-amber-400 text-glow-gold tabular-nums">
+              <div className="text-4xl sm:text-5xl font-black font-mono text-amber-400 tabular-nums">
                 {activeSignal.predictedMultiplier.toFixed(2)}x
               </div>
               <div className="flex items-center justify-center gap-2 text-xs font-mono pt-1 tabular-nums">
@@ -704,8 +702,8 @@ export const AviatorPredictorView: React.FC = () => {
 
             {/* Confidence Bar */}
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs font-orbitron tabular-nums">
-                <span className="text-slate-400">ALGORITHM ACCURACY SCORE</span>
+              <div className="flex items-center justify-between text-xs font-mono tabular-nums">
+                <span className="text-slate-400 font-sans">ALGORITHM ACCURACY SCORE</span>
                 <span className="text-emerald-400 font-bold">{activeSignal.confidence}%</span>
               </div>
               <div className="w-full h-2.5 rounded-full bg-slate-900 border border-slate-800 overflow-hidden p-0.5">
@@ -720,14 +718,14 @@ export const AviatorPredictorView: React.FC = () => {
             <div className="grid grid-cols-2 gap-2 text-xs font-mono">
               <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-2.5">
                 <span className="text-[10px] text-slate-500 block">DETECTED PATTERN</span>
-                <span className="font-bold font-orbitron text-amber-300 text-[11px]">
+                <span className="font-bold font-sans text-amber-300 text-[11px]">
                   {activeSignal.pattern.replace('_', ' ')}
                 </span>
               </div>
 
               <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-2.5">
                 <span className="text-[10px] text-slate-500 block">CYCLE PHASE</span>
-                <span className="font-bold font-orbitron text-cyan-300 text-[11px]">
+                <span className="font-bold font-sans text-cyan-300 text-[11px]">
                   {activeSignal.phase}
                 </span>
               </div>
@@ -735,7 +733,7 @@ export const AviatorPredictorView: React.FC = () => {
               <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-2.5">
                 <span className="text-[10px] text-slate-500 block">MACD OSCILLATOR</span>
                 <span
-                  className={`font-bold font-orbitron text-[11px] ${
+                  className={`font-bold font-mono text-[11px] ${
                     activeSignal.macdSignal === 'BUY' ? 'text-emerald-400' : 'text-slate-400'
                   }`}
                 >
@@ -766,7 +764,7 @@ export const AviatorPredictorView: React.FC = () => {
                 );
                 setTimeout(() => setAppliedNotice(null), 3200);
               }}
-              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 font-orbitron font-bold text-white text-xs tracking-wider transition shadow-lg shadow-cyan-950/40 flex items-center justify-center gap-1.5"
+              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 font-sans font-bold text-white text-xs tracking-wider transition shadow-lg shadow-cyan-950/40 flex items-center justify-center gap-1.5"
             >
               <Zap className="w-3.5 h-3.5" />
               <span>APPLY SIGNAL TO BET COCKPIT #1</span>
@@ -784,7 +782,7 @@ export const AviatorPredictorView: React.FC = () => {
             <div className="flex items-center justify-between text-slate-400">
               <span className="flex items-center gap-1.5">
                 <Shield className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="font-orbitron font-bold text-slate-300">PROVABLY FAIR SEED</span>
+                <span className="font-sans font-bold text-slate-300">PROVABLY FAIR SEED</span>
               </span>
               <span className="text-[10px] text-emerald-400">SHA-256 HMAC VERIFIED</span>
             </div>
@@ -798,17 +796,18 @@ export const AviatorPredictorView: React.FC = () => {
       {/* Bookmaker Credentials Modal */}
       {isConnectModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0b0f19] border border-amber-500/30 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl font-mono">
+          <div className="bg-[#0F141E] border border-white/[0.12] rounded-2xl max-w-md w-full p-5 space-y-4 font-mono">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <Lock className="w-4 h-4 text-amber-400" />
-                <h3 className="font-orbitron font-bold text-sm text-white">CONNECT {activeBookmaker}</h3>
+                <h3 className="font-sans font-bold text-sm text-white">CONNECT {activeBookmaker}</h3>
               </div>
               <button
                 onClick={() => setIsConnectModalOpen(false)}
-                className="text-slate-400 hover:text-white"
+                className="p-1 text-slate-400 hover:text-white rounded-lg"
+                aria-label="Close modal"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -843,7 +842,7 @@ export const AviatorPredictorView: React.FC = () => {
                   setIsConnected(true);
                   setIsConnectModalOpen(false);
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-orbitron font-bold text-xs transition"
+                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-sans font-bold text-xs transition"
               >
                 AUTHORIZE &amp; LINK
               </button>

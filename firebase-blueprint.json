@@ -1,5 +1,17 @@
 {
   "entities": {
+    "Admin": {
+      "title": "System Administrator",
+      "description": "Authorized system administrator UID record for RBAC verification",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 128 },
+        "role": { "type": "string", "enum": ["SUPER_ADMIN", "ADMIN"] },
+        "createdAt": { "type": "string", "maxLength": 40 }
+      },
+      "required": ["uid", "role"]
+    },
     "License": {
       "title": "AlgoMax License",
       "description": "Client software license key for AlgoMax EA automated trading bot",
@@ -14,8 +26,8 @@
         "clientEmail": { "type": "string", "maxLength": 128 },
         "broker": { "type": "string", "maxLength": 64 },
         "status": { "type": "string", "enum": ["ACTIVE", "EXPIRED", "REVOKED", "PENDING"] },
-        "createdAt": { "type": "string", "maxLength": 32 },
-        "expiresAt": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "string", "maxLength": 40 },
+        "expiresAt": { "type": "string", "maxLength": 40 },
         "maxAccounts": { "type": "number" },
         "activeAccounts": { "type": "number" }
       },
@@ -38,7 +50,7 @@
         "equity": { "type": "number" },
         "margin": { "type": "number" },
         "autoTrading": { "type": "boolean" },
-        "lastPing": { "type": "string", "maxLength": 32 }
+        "lastPing": { "type": "string", "maxLength": 40 }
       },
       "required": ["id", "platform", "broker", "accountNumber", "status"]
     },
@@ -52,7 +64,7 @@
         "action": { "type": "string", "maxLength": 64 },
         "target": { "type": "string", "maxLength": 128 },
         "details": { "type": "string", "maxLength": 512 },
-        "timestamp": { "type": "string", "maxLength": 32 },
+        "timestamp": { "type": "string", "maxLength": 40 },
         "status": { "type": "string", "maxLength": 32 }
       },
       "required": ["id", "adminEmail", "action", "timestamp"]
@@ -75,6 +87,10 @@
     }
   },
   "firestore": {
+    "/admins/{adminId}": {
+      "schema": "Admin",
+      "description": "Authorized system administrator UID directory"
+    },
     "/licenses/{licenseId}": {
       "schema": "License",
       "description": "AlgoMax client license keys and hardware authorizations"

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useTrading } from '../../context/TradingContext';
+import { useBrand } from '../../context/BrandContext';
 import { EmergeCertificateModal } from './EmergeCertificateModal';
 import confetti from 'canvas-confetti';
 import {
@@ -21,6 +22,7 @@ import {
 
 export const EmergePropView: React.FC = () => {
   const { challenge, resetChallenge, simulatePropPass, accountEquity, orderHistory } = useTrading();
+  const { brand } = useBrand();
   const [isCertificateOpen, setIsCertificateOpen] = useState<boolean>(false);
   const [selectedCapital, setSelectedCapital] = useState<number>(challenge.initialBalance);
   const [selectedPhase, setSelectedPhase] = useState<'1-PHASE' | '2-PHASE' | 'INSTANT_FUNDED'>(challenge.accountType);
@@ -80,15 +82,14 @@ export const EmergePropView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Top Banner */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[#17130a] via-[#10141d] to-[#0c1424] border border-amber-500/40 p-6 md:p-8 shadow-2xl">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="rounded-2xl bg-[#0F141E] border border-amber-500/35 p-6 md:p-8 shadow-xl">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="max-w-2xl space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-mono font-bold">
+            <div className="inline-flex items-center gap-2 text-amber-400 text-xs font-mono font-semibold uppercase tracking-wider">
               <Award className="w-3.5 h-3.5" />
-              <span>Emerge Profit • EmergeFX Prop Evaluation Suite</span>
+              <span>Emerge Profit · EmergeFX Prop Evaluation Suite</span>
             </div>
-            <h2 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
+            <h2 className="text-2xl md:text-3xl font-bold text-white font-display tracking-tight">
               Institutional Funded Evaluation Desk
             </h2>
             <p className="text-sm text-slate-300 leading-relaxed">
@@ -99,10 +100,10 @@ export const EmergePropView: React.FC = () => {
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
             <button
               onClick={handleSimulatePass}
-              className="px-5 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs uppercase font-mono tracking-wider rounded-xl transition shadow-lg shadow-amber-950/60 flex items-center justify-center gap-2"
+              className="px-5 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs uppercase font-mono tracking-wider rounded-xl transition flex items-center justify-center gap-2"
             >
               <Award className="w-4 h-4" />
-              <span>Verify Milestone & Certificate</span>
+              <span>Verify Milestone &amp; Certificate</span>
             </button>
             {challenge.status === 'PASSED' && (
               <button
@@ -334,7 +335,7 @@ export const EmergePropView: React.FC = () => {
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                 <div>
                   <div className="text-slate-200 font-semibold">Algorithmic & EA Trading</div>
-                  <div className="text-[11px] text-slate-400">EasyWay2Trade and custom EAs 100% permitted</div>
+                  <div className="text-[11px] text-slate-400">{brand.brandName} algorithmic &amp; custom EAs 100% permitted</div>
                 </div>
               </div>
               <span className="text-emerald-400 font-bold">ALLOWED</span>
@@ -398,8 +399,9 @@ export const EmergePropView: React.FC = () => {
             </div>
           </div>
 
-          <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-[11px] leading-relaxed">
-            💡 EasyWay2Trade bots (Endgame EA and Shadow River) are pre-configured with the exact risk presets for this Emerge account size.
+          <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-[11px] leading-relaxed flex items-start gap-2">
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <span>{brand.brandName} bots (Endgame EA and Shadow River) are pre-configured with exact risk presets for this funded evaluation size.</span>
           </div>
         </div>
       </div>

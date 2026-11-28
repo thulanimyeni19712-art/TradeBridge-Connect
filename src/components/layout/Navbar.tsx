@@ -81,7 +81,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
-              <Activity className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+              <Activity className="w-3.5 h-3.5 text-emerald-400" />
               <span>Auto-Pilot MT5</span>
             </button>
 
@@ -150,7 +150,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Latency Pill */}
             <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-[#10141e] border border-slate-800 rounded-xl font-mono text-[11px] text-slate-300">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
               <span className="text-emerald-400 font-bold">{bridgeLatencyMs}ms</span>
               <span className="text-slate-500">LD4</span>
             </div>
@@ -186,7 +186,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="Global Emergency Kill Switch"
               className="p-2 bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/40 rounded-xl transition flex items-center justify-center shrink-0 shadow-lg shadow-rose-950/60"
             >
-              <AlertTriangle className="w-4 h-4 animate-pulse" />
+              <AlertTriangle className="w-4 h-4" />
             </button>
           </div>
         </div>

@@ -96,33 +96,34 @@ export const AviatorInfinityConsoleView: React.FC = () => {
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-12 font-mono">
       {/* Title */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#0a0d14] border border-amber-500/20 rounded-2xl p-4 shadow-xl">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#0F141E] border border-white/[0.08] rounded-2xl p-4 sm:p-5">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            </span>
-            <h2 className="text-base font-orbitron font-extrabold text-white tracking-wider uppercase">
-              INFINITY CONSOLE &amp; PROVABLY FAIR VERIFIER
-            </h2>
+          <div className="flex items-center gap-2 text-xs text-slate-400 font-sans">
+            <span className="font-semibold text-emerald-400">Provably Fair Verifier</span>
+            <span aria-hidden="true">·</span>
+            <span>HMAC-SHA256 Hash Auditor</span>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            SHA-256 HMAC cryptographic validation engine ensuring 100% mathematical integrity for every Aviator round
+          <h2 className="text-base sm:text-lg font-sans font-bold text-white tracking-tight mt-0.5 flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span>Infinity Console &amp; Seed Audit</span>
+          </h2>
+          <p className="text-xs text-slate-400 mt-1 font-sans">
+            Cryptographic validation engine verifying mathematical integrity for every Aviator round
           </p>
         </div>
 
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-emerald-400">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-          <span>CRYPTOGRAPHIC HASH ENGINE READY</span>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#090C12] border border-white/[0.08] text-xs text-emerald-400 whitespace-nowrap self-start sm:self-auto">
+          <span className="w-2 h-2 rounded-full bg-emerald-400" />
+          <span>Hash Engine Ready</span>
         </div>
       </div>
 
       {/* Grid: Hash Verifier Tool & Algorithmic Entropy Index */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left Stage: Provably Fair Hash Form (7 cols) */}
-        <div className="lg:col-span-7 bg-[#0b0e17] border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
+        <div className="lg:col-span-7 bg-[#0F141E] border border-white/[0.08] rounded-2xl p-5 space-y-4">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <h3 className="text-sm font-orbitron font-bold text-white flex items-center gap-2">
+            <h3 className="text-sm font-sans font-bold text-white flex items-center gap-2">
               <Key className="w-4 h-4 text-amber-400" />
               <span>ROUND SEED AUDITOR</span>
             </h3>
@@ -144,8 +145,8 @@ export const AviatorInfinityConsoleView: React.FC = () => {
                       r.multiplier >= 10
                         ? 'bg-pink-500/15 border-pink-500/40 text-pink-300 hover:bg-pink-500/25'
                         : r.multiplier >= 2
-                        ? 'bg-purple-500/15 border-purple-500/40 text-purple-300 hover:bg-purple-500/25'
-                        : 'bg-cyan-500/10 border-slate-700 text-cyan-300 hover:border-cyan-500/50'
+                        ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/25'
+                        : 'bg-[#141B29] border-white/[0.08] text-slate-300 hover:border-cyan-500/40'
                     }`}
                   >
                     #{r.roundNumber} ({r.multiplier.toFixed(2)}x)
@@ -191,10 +192,10 @@ export const AviatorInfinityConsoleView: React.FC = () => {
             <button
               type="button"
               onClick={handleVerify}
-              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 font-orbitron font-bold text-slate-950 text-xs transition shadow-lg shadow-amber-950/40 flex items-center justify-center gap-2"
+              className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 font-sans font-bold text-slate-950 text-xs transition flex items-center justify-center gap-2"
             >
               <Search className="w-4 h-4" />
-              <span>CRYPTOGRAPHICALLY RECALCULATE MULTIPLIER</span>
+              <span>Recalculate Multiplier</span>
             </button>
           </div>
 
@@ -202,8 +203,8 @@ export const AviatorInfinityConsoleView: React.FC = () => {
           {verificationResult && (
             <div className="bg-slate-950/90 border border-emerald-500/30 rounded-xl p-4 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-orbitron text-slate-400">CALCULATED RESULT:</span>
-                <span className="text-2xl font-black font-orbitron text-emerald-400 tabular-nums">
+                <span className="text-xs font-sans text-slate-400">CALCULATED RESULT:</span>
+                <span className="text-2xl font-black font-sans text-emerald-400 tabular-nums">
                   {verificationResult.multiplier.toFixed(2)}x
                 </span>
               </div>
@@ -222,13 +223,13 @@ export const AviatorInfinityConsoleView: React.FC = () => {
         </div>
 
         {/* Right Stage: Live Entropy & Volatility Diagnostics (5 cols) */}
-        <div className="lg:col-span-5 bg-[#0b0e17] border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
+        <div className="lg:col-span-5 bg-[#0F141E] border border-white/[0.08] rounded-2xl p-5 space-y-4">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <h3 className="text-sm font-orbitron font-bold text-white flex items-center gap-2">
+            <h3 className="text-sm font-sans font-bold text-white flex items-center gap-2">
               <Activity className="w-4 h-4 text-cyan-400" />
               <span>CYCLE ENTROPY RADAR</span>
             </h3>
-            <span className="text-[10px] text-amber-400 font-bold font-orbitron tabular-nums">ELO {currentElo}</span>
+            <span className="text-[10px] text-amber-400 font-bold font-sans tabular-nums">ELO {currentElo}</span>
           </div>
 
           {/* Live Computed Entropy Gauge Cards */}
@@ -264,7 +265,7 @@ export const AviatorInfinityConsoleView: React.FC = () => {
             <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 space-y-1">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-400">Live Cluster Streak</span>
-                <span className="text-purple-300 font-bold">{diagnostics.streakText}</span>
+                <span className="text-cyan-300 font-bold">{diagnostics.streakText}</span>
               </div>
               <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
                 <span>Rolling Sample Window</span>

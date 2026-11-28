@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useTrading } from '../../context/TradingContext';
+import { useBrand } from '../../context/BrandContext';
 import {
   Server,
   Smartphone,
@@ -69,6 +70,7 @@ export interface MigratedTerminal {
 
 export const EAMigrateProView: React.FC = () => {
   const { accountBalance, accountEquity, terminals, bridgeLatencyMs, executeKillSwitch } = useTrading();
+  const { brand } = useBrand();
 
   // Active navigation tab within EA Migrate Pro
   const [activeTab, setActiveTab] = useState<'WIZARD' | 'FLEET' | 'NEWS_SHIELD' | 'PRICING' | 'LATENCY_TEST'>('WIZARD');
@@ -105,8 +107,10 @@ export const EAMigrateProView: React.FC = () => {
   const [liveProbeRttMs, setLiveProbeRttMs] = useState<number | null>(null);
   const [isProbingLatency, setIsProbingLatency] = useState<boolean>(false);
 
-  // Copied token state
+  // Copied token & safe container controls state
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [confirmKillId, setConfirmKillId] = useState<string | null>(null);
+  const [fleetToast, setFleetToast] = useState<string | null>(null);
 
   // Initial list of cloud migrated terminals
   const [migratedTerminals, setMigratedTerminals] = useState<MigratedTerminal[]>([
@@ -158,12 +162,12 @@ export const EAMigrateProView: React.FC = () => {
     },
     {
       id: 'EAM-NY4-7319',
-      name: 'Liquidity Edge SMC Hunter',
+      name: 'Sovereign SMC Sweep Hunter',
       platform: 'MT4',
       broker: 'Exness Real 09',
       server: 'Exness-Real9',
       login: '3381920',
-      eaName: 'LiquidityEdge_SMC_v4.ex4',
+      eaName: 'SovereignSweep_SMC_v4.ex4',
       magicNumber: 771200,
       status: 'RUNNING',
       region: 'New York Equinix NY4',
@@ -176,7 +180,7 @@ export const EAMigrateProView: React.FC = () => {
       profitToday: 890.0,
       newsShield: true,
       cloudBuffer: false,
-      mobileSyncKey: 'SYNC-NY4-2201-LES',
+      mobileSyncKey: 'SYNC-NY4-2201-SSH',
       lastPing: 'Just now',
     },
   ]);
@@ -304,8 +308,25 @@ export const EAMigrateProView: React.FC = () => {
     );
   };
 
+  const handleRestartTerminal = (id: string) => {
+    setMigratedTerminals((prev) =>
+      prev.map((term) =>
+        term.id === id
+          ? {
+              ...term,
+              status: 'RUNNING',
+              lastPing: 'Restarted now',
+              mobileSyncKey: `SYNC-${id.slice(-4)}-${randomHex(2).toUpperCase()}`,
+            }
+          : term
+      )
+    );
+    setFleetToast(`Container ${id} restarted and Mobile Sync Token rotated.`);
+    timersRef.current.push(window.setTimeout(() => setFleetToast(null), 3500));
+  };
+
   const copyToClipboard = (text: string, keyName: string) => {
-    navigator.clipboard.writeText(text);
+    void navigator.clipboard?.writeText(text).catch(() => undefined);
     setCopiedKey(keyName);
     timersRef.current.push(window.setTimeout(() => setCopiedKey(null), 2500));
   };
@@ -313,43 +334,33 @@ export const EAMigrateProView: React.FC = () => {
   return (
     <div className="space-y-6 font-mono text-slate-100 max-w-[1700px] mx-auto pb-12">
       {/* =========================================================================
-          HERO BANNER: EA MIGRATE PRO CLONE
+          HERO BANNER: ZERO-PC CLOUD VPS HOST
           ========================================================================= */}
-      <div className="relative rounded-3xl bg-gradient-to-r from-[#060a15] via-[#091226] to-[#060a15] border border-cyan-500/30 p-6 sm:p-8 shadow-[0_0_50px_rgba(6,182,212,0.15)] overflow-hidden">
-        {/* Ambient holographic background lighting */}
-        <div className="absolute top-0 right-1/4 w-[500px] h-[300px] bg-gradient-to-br from-cyan-500/15 via-teal-500/5 to-transparent rounded-full blur-[140px] pointer-events-none" />
-        <div className="absolute -bottom-10 left-10 w-[400px] h-[250px] bg-gradient-to-tr from-purple-500/15 to-transparent rounded-full blur-[120px] pointer-events-none" />
-
+      <div className="relative rounded-2xl bg-[#0F141E] border border-white/[0.08] p-6 sm:p-8 overflow-hidden">
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="max-w-3xl space-y-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="px-3 py-1 rounded-full text-xs font-black bg-gradient-to-r from-cyan-500/20 to-teal-500/20 text-cyan-300 border border-cyan-500/40 uppercase tracking-widest flex items-center gap-1.5 shadow-md shadow-cyan-950/40">
-                <Smartphone className="w-3.5 h-3.5 text-cyan-400" />
-                <span>eamigratepro.vercel.app</span>
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span>24/7 Cloud VPS Online</span>
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 uppercase tracking-wider">
-                Zero PC Required
-              </span>
+            <div className="flex items-center gap-2 text-xs text-slate-400 font-sans flex-wrap">
+              <span className="font-semibold text-cyan-400">{brand.brandName} · Zero-PC Cloud Host</span>
+              <span aria-hidden="true">·</span>
+              <span className="text-emerald-400 font-medium">24/7 Cloud VPS Online</span>
+              <span aria-hidden="true">·</span>
+              <span>{brand.ownerEntity}</span>
             </div>
 
-            <h1 className="text-2xl sm:text-4xl font-extrabold text-white font-orbitron tracking-tight leading-tight">
-              Run Your Forex & Crypto EAs 24/7 in the Cloud —{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-teal-300 to-emerald-400">
+            <h1 className="text-2xl sm:text-4xl font-extrabold text-white font-display tracking-tight leading-tight">
+              Run Your Forex &amp; Crypto EAs 24/7 in the Cloud —{' '}
+              <span className="text-cyan-400">
                 Directly from Your Phone
               </span>
             </h1>
 
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-sans">
-              Migrate any MetaTrader 4 or MetaTrader 5 Expert Advisor to our ultra-low latency (1ms) cloud infrastructure. 
-              No need to leave your computer running or keep your phone turned on. Features automated news event protection, 
+              Migrate any MetaTrader 4 or MetaTrader 5 Expert Advisor to our ultra-low latency (1ms) cloud infrastructure.
+              No need to leave your computer running or keep your phone turned on. Features automated news event protection,
               dedicated platform freeze buffers, and real-time mobile companion sync.
             </p>
 
-            {/* Micro value badges */}
+            {/* Micro value metrics */}
             <div className="pt-2 flex items-center gap-3 sm:gap-6 flex-wrap text-xs text-slate-300 font-mono">
               <span className="flex items-center gap-1.5 text-cyan-300 font-semibold">
                 <Zap className="w-4 h-4 text-cyan-400" /> 1ms Equinix LD4/NY4
@@ -360,8 +371,8 @@ export const EAMigrateProView: React.FC = () => {
               <span className="flex items-center gap-1.5 text-amber-300 font-semibold">
                 <Flame className="w-4 h-4 text-amber-400" /> NFP/CPI News Freeze Shield
               </span>
-              <span className="flex items-center gap-1.5 text-purple-300 font-semibold">
-                <Smartphone className="w-4 h-4 text-purple-400" /> iOS & Android Sync
+              <span className="flex items-center gap-1.5 text-sky-300 font-semibold">
+                <Smartphone className="w-4 h-4 text-sky-400" /> iOS &amp; Android Sync
               </span>
             </div>
           </div>
@@ -378,11 +389,11 @@ export const EAMigrateProView: React.FC = () => {
             <div className="grid grid-cols-2 gap-3 text-center tabular-nums">
               <div className="p-2.5 rounded-xl bg-slate-900/60 border border-white/5">
                 <span className="text-[10px] text-slate-400 uppercase block">Active Terminals</span>
-                <span className="text-lg font-bold text-white font-orbitron">{migratedTerminals.length} Online</span>
+                <span className="text-lg font-bold text-white font-mono tabular-nums">{migratedTerminals.length} Online</span>
               </div>
               <div className="p-2.5 rounded-xl bg-slate-900/60 border border-white/5">
                 <span className="text-[10px] text-slate-400 uppercase block">Avg Ping</span>
-                <span className="text-lg font-bold text-cyan-300 font-orbitron">{avgPingMs}ms</span>
+                <span className="text-lg font-bold text-cyan-300 font-mono tabular-nums">{avgPingMs}ms</span>
               </div>
             </div>
 
@@ -391,7 +402,7 @@ export const EAMigrateProView: React.FC = () => {
                 setActiveTab('WIZARD');
                 setWizardStep(1);
               }}
-              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 via-teal-400 to-emerald-400 hover:from-cyan-400 hover:to-emerald-300 text-slate-950 text-xs font-black font-orbitron uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/25 transition active:scale-95"
+              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 via-teal-400 to-emerald-400 hover:from-cyan-400 hover:to-emerald-300 text-slate-950 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/25 transition active:scale-95"
             >
               <Upload className="w-4 h-4 text-slate-950" />
               <span>Migrate New EA (3 Steps)</span>
@@ -473,11 +484,11 @@ export const EAMigrateProView: React.FC = () => {
           {/* Step indicator breadcrumbs */}
           <div className="flex items-center justify-between border-b border-white/10 pb-4">
             <div className="flex items-center gap-3">
-              <span className="w-8 h-8 rounded-full bg-cyan-500 text-slate-950 font-bold flex items-center justify-center font-orbitron text-sm">
+              <span className="w-8 h-8 rounded-full bg-cyan-500 text-slate-950 font-bold flex items-center justify-center font-mono text-sm">
                 {wizardStep}
               </span>
               <div>
-                <h2 className="text-base sm:text-lg font-bold text-white font-orbitron">
+                <h2 className="text-base sm:text-lg font-bold text-white font-display">
                   {wizardStep === 1 && 'Step 1: Choose Platform & Select Robot (EA)'}
                   {wizardStep === 2 && 'Step 2: Broker Server & Trading Account Credentials'}
                   {wizardStep === 3 && 'Step 3: Select Cloud VPS Data Center & Freeze Shield'}
@@ -524,7 +535,7 @@ export const EAMigrateProView: React.FC = () => {
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-black font-orbitron">
+                      <div className="w-10 h-10 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold font-mono">
                         MT5
                       </div>
                       <div className="text-left">
@@ -545,7 +556,7 @@ export const EAMigrateProView: React.FC = () => {
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center font-black font-orbitron">
+                      <div className="w-10 h-10 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center font-bold font-mono">
                         MT4
                       </div>
                       <div className="text-left">
@@ -590,7 +601,7 @@ export const EAMigrateProView: React.FC = () => {
                       { name: 'AlgoMax EA v5.2', type: 'SMC & FVG Harvester', win: '94.6%', pass: 'Prop Firm Ready', icon: Zap },
                       { name: 'Nexus2.v1 | Kante FX', type: 'Neural BOE Momentum', win: '91.8%', pass: 'Micro-Batch 3x', icon: Sparkles },
                       { name: 'Nguni Aviator Pro v6', type: 'High-Frequency Tick Scraper', win: '89.4%', pass: 'Crash Engine', icon: Flame },
-                      { name: 'Liquidity Edge EA', type: 'Institutional Order Block', win: '92.1%', pass: '077 600 4742', icon: Layers },
+                      { name: 'Sovereign Sweep Pro', type: 'Institutional Order Block', win: '92.1%', pass: 'Proprietary IP', icon: Layers },
                       { name: 'Endgame HFT Robot', type: 'Sub-ms Arbitrage Pips', win: '88.5%', pass: 'Tick-to-Trade', icon: Cpu },
                       { name: 'Shadow River Matrix', type: 'Breakout Volatility', win: '86.2%', pass: 'London/NY Peak', icon: Globe },
                     ].map((bot) => (
@@ -608,7 +619,7 @@ export const EAMigrateProView: React.FC = () => {
                             <bot.icon className="w-4 h-4" />
                           </div>
                           <div>
-                            <span className="font-bold text-xs font-orbitron block">{bot.name}</span>
+                            <span className="font-bold text-xs font-sans block">{bot.name}</span>
                             <span className="text-[10px] text-slate-400 font-sans block">{bot.type}</span>
                           </div>
                         </div>
@@ -622,7 +633,7 @@ export const EAMigrateProView: React.FC = () => {
                 ) : (
                   <div className="p-8 border-2 border-dashed border-cyan-500/40 rounded-2xl bg-cyan-950/10 text-center space-y-3">
                     <div className="w-12 h-12 rounded-xl bg-cyan-500/20 text-cyan-400 mx-auto flex items-center justify-center">
-                      <Upload className="w-6 h-6 animate-bounce" />
+                      <Upload className="w-6 h-6" />
                     </div>
                     <div>
                       <h4 className="text-sm font-bold text-white">Drag and drop your EA file here</h4>
@@ -706,7 +717,7 @@ export const EAMigrateProView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setWizardStep(2)}
-                  className="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold font-orbitron flex items-center gap-2 transition shadow-lg shadow-cyan-500/20"
+                  className="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold flex items-center gap-2 transition shadow-lg shadow-cyan-500/20"
                 >
                   <span>Continue to Broker Credentials</span>
                   <ArrowRight className="w-4 h-4" />
@@ -826,7 +837,7 @@ export const EAMigrateProView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setWizardStep(3)}
-                  className="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold font-orbitron flex items-center gap-2 transition shadow-lg shadow-cyan-500/20"
+                  className="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold flex items-center gap-2 transition shadow-lg shadow-cyan-500/20"
                 >
                   <span>Continue to VPS Region &amp; Shield</span>
                   <ArrowRight className="w-4 h-4" />
@@ -891,7 +902,7 @@ export const EAMigrateProView: React.FC = () => {
                     </p>
                   </div>
                   <div className={`w-6 h-6 rounded-md flex items-center justify-center font-bold ${enableNewsShield ? 'bg-amber-500 text-slate-950' : 'bg-slate-800'}`}>
-                    {enableNewsShield ? '✓' : ''}
+                    {enableNewsShield && <Check className="w-3.5 h-3.5" />}
                   </div>
                 </div>
 
@@ -913,7 +924,7 @@ export const EAMigrateProView: React.FC = () => {
                     </p>
                   </div>
                   <div className={`w-6 h-6 rounded-md flex items-center justify-center font-bold ${enableCloudBuffer ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800'}`}>
-                    {enableCloudBuffer ? '✓' : ''}
+                    {enableCloudBuffer && <Check className="w-3.5 h-3.5" />}
                   </div>
                 </div>
               </div>
@@ -947,7 +958,7 @@ export const EAMigrateProView: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleStartMigration}
-                    className="px-8 py-3 rounded-xl bg-gradient-to-r from-cyan-500 via-teal-400 to-emerald-400 hover:from-cyan-400 hover:to-emerald-300 text-slate-950 text-xs font-black font-orbitron uppercase tracking-wider flex items-center gap-2 transition shadow-xl shadow-cyan-500/30 active:scale-95"
+                    className="px-8 py-3 rounded-xl bg-gradient-to-r from-cyan-500 via-teal-400 to-emerald-400 hover:from-cyan-400 hover:to-emerald-300 text-slate-950 text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition shadow-xl shadow-cyan-500/30 active:scale-95"
                   >
                     <Server className="w-4 h-4 text-slate-950" />
                     <span>Launch 24/7 Cloud Migration</span>
@@ -965,7 +976,7 @@ export const EAMigrateProView: React.FC = () => {
       {activeTab === 'FLEET' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-white font-orbitron flex items-center gap-2">
+            <h3 className="text-base font-bold text-white font-display flex items-center gap-2">
               <Server className="w-4 h-4 text-cyan-400" />
               <span>Active Cloud Terminals ({migratedTerminals.length} Running 24/7)</span>
             </h3>
@@ -981,16 +992,25 @@ export const EAMigrateProView: React.FC = () => {
             </button>
           </div>
 
+          {fleetToast && (
+            <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs font-mono flex items-center justify-between">
+              <span>{fleetToast}</span>
+              <button onClick={() => setFleetToast(null)} className="text-slate-400 hover:text-white">
+                Dismiss
+              </button>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {migratedTerminals.map((term) => (
               <div
                 key={term.id}
-                className="p-5 rounded-2xl bg-[#070b14] border border-cyan-500/25 shadow-xl space-y-4 relative overflow-hidden"
+                className="p-5 rounded-2xl bg-[#0F141E] border border-white/[0.08] space-y-4 relative overflow-hidden"
               >
                 {/* Header of Card */}
-                <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-xs font-orbitron">
+                    <div className="w-8 h-8 rounded-lg bg-cyan-500/15 text-cyan-400 flex items-center justify-center font-bold text-xs font-mono">
                       {term.platform}
                     </div>
                     <div>
@@ -1000,34 +1020,32 @@ export const EAMigrateProView: React.FC = () => {
                   </div>
 
                   <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      term.status === 'RUNNING'
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    className={`text-[11px] font-mono font-bold ${
+                      term.status === 'RUNNING' ? 'text-emerald-400' : 'text-amber-300'
                     }`}
                   >
-                    ● {term.status}
+                    {term.status}
                   </span>
                 </div>
 
                 {/* Performance HUD Mini */}
-                <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono">
-                  <div className="p-2 rounded-lg bg-slate-900/60 border border-white/5">
+                <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono tabular-nums">
+                  <div className="p-2 rounded-lg bg-[#161D2B] border border-white/[0.06]">
                     <span className="text-[9px] text-slate-400 uppercase block">Ping</span>
                     <span className="font-bold text-cyan-300">{term.pingMs}ms</span>
                   </div>
-                  <div className="p-2 rounded-lg bg-slate-900/60 border border-white/5">
+                  <div className="p-2 rounded-lg bg-[#161D2B] border border-white/[0.06]">
                     <span className="text-[9px] text-slate-400 uppercase block">CPU</span>
                     <span className="font-bold text-white">{term.cpuLoad}%</span>
                   </div>
-                  <div className="p-2 rounded-lg bg-slate-900/60 border border-white/5">
+                  <div className="p-2 rounded-lg bg-[#161D2B] border border-white/[0.06]">
                     <span className="text-[9px] text-slate-400 uppercase block">Uptime</span>
                     <span className="font-bold text-emerald-400">{term.uptimeHours}h</span>
                   </div>
                 </div>
 
                 {/* Balance & Equity */}
-                <div className="p-3 rounded-xl bg-slate-900/80 border border-white/10 flex items-center justify-between text-xs font-mono">
+                <div className="p-3 rounded-xl bg-[#161D2B] border border-white/[0.06] flex items-center justify-between text-xs font-mono tabular-nums">
                   <div>
                     <span className="text-[9px] text-slate-400 uppercase block">Equity</span>
                     <span className="font-bold text-white text-sm">
@@ -1043,15 +1061,14 @@ export const EAMigrateProView: React.FC = () => {
                 </div>
 
                 {/* Mobile sync key token */}
-                <div className="p-2.5 rounded-lg bg-[#050811] border border-white/10 flex items-center justify-between text-xs font-mono">
-                  <div className="flex items-center gap-1.5 text-slate-400">
-                    <Smartphone className="w-3.5 h-3.5 text-purple-400" />
-                    <span className="text-[10px]">Mobile Key:</span>
-                    <code className="text-cyan-300 text-[10px]">{term.mobileSyncKey}</code>
+                <div className="p-2.5 rounded-lg bg-[#090C12] border border-white/[0.08] flex items-center justify-between text-xs font-mono">
+                  <div className="flex items-center gap-1.5 text-slate-400 min-w-0">
+                    <Smartphone className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <code className="text-cyan-300 text-[10px] truncate">{term.mobileSyncKey}</code>
                   </div>
                   <button
                     onClick={() => copyToClipboard(term.mobileSyncKey, term.id)}
-                    className="p-1 rounded bg-slate-800 text-slate-300 hover:text-white"
+                    className="p-1 rounded bg-[#161D2B] text-slate-300 hover:text-white shrink-0"
                     title="Copy Key"
                   >
                     {copiedKey === term.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
@@ -1059,36 +1076,65 @@ export const EAMigrateProView: React.FC = () => {
                 </div>
 
                 {/* Control Action Buttons */}
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    onClick={() => handleToggleTerminal(term.id)}
-                    className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-                      term.status === 'RUNNING'
-                        ? 'bg-amber-600/30 hover:bg-amber-600/40 text-amber-300 border border-amber-500/30'
-                        : 'bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30'
-                    }`}
-                  >
-                    {term.status === 'RUNNING' ? (
-                      <>
-                        <Pause className="w-3.5 h-3.5" />
-                        <span>Pause EA</span>
-                      </>
-                    ) : (
-                      <>
-                        <Play className="w-3.5 h-3.5" />
-                        <span>Resume EA</span>
-                      </>
-                    )}
-                  </button>
+                {confirmKillId === term.id ? (
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => {
+                        executeKillSwitch();
+                        setConfirmKillId(null);
+                        setFleetToast(`Flattened all open positions via ${term.id} emergency trigger.`);
+                      }}
+                      className="flex-1 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold"
+                    >
+                      Confirm Flatten All
+                    </button>
+                    <button
+                      onClick={() => setConfirmKillId(null)}
+                      className="px-3 py-2 rounded-xl bg-[#161D2B] text-slate-300 text-xs border border-white/[0.08]"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => handleToggleTerminal(term.id)}
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                        term.status === 'RUNNING'
+                          ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30'
+                          : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30'
+                      }`}
+                    >
+                      {term.status === 'RUNNING' ? (
+                        <>
+                          <Pause className="w-3.5 h-3.5" />
+                          <span>Pause EA</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-3.5 h-3.5" />
+                          <span>Resume EA</span>
+                        </>
+                      )}
+                    </button>
 
-                  <button
-                    onClick={() => executeKillSwitch()}
-                    className="p-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30"
-                    title="Emergency Flatten Positions"
-                  >
-                    <AlertTriangle className="w-4 h-4" />
-                  </button>
-                </div>
+                    <button
+                      onClick={() => handleRestartTerminal(term.id)}
+                      className="p-2 rounded-xl bg-[#161D2B] hover:bg-slate-800 text-cyan-300 border border-white/[0.08]"
+                      title="Restart Container & Rotate Key"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      onClick={() => setConfirmKillId(term.id)}
+                      className="p-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30"
+                      title="Emergency Flatten Positions"
+                    >
+                      <AlertTriangle className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -1099,9 +1145,9 @@ export const EAMigrateProView: React.FC = () => {
           TAB 3: NEWS SHIELD & PLATFORM FREEZE PROTECTION
           ========================================================================= */}
       {activeTab === 'NEWS_SHIELD' && (
-        <div className="rounded-2xl bg-[#070b14] border border-cyan-500/20 p-6 shadow-xl space-y-6">
-          <div className="border-b border-white/10 pb-4">
-            <h3 className="text-lg font-bold text-white font-orbitron flex items-center gap-2">
+        <div className="rounded-2xl bg-[#0F141E] border border-white/[0.08] p-6 space-y-6">
+          <div className="border-b border-white/[0.08] pb-4">
+            <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
               <Flame className="w-5 h-5 text-amber-400" />
               <span>News Event Auto-Pilot &amp; Dedicated Cloud Buffer</span>
             </h3>
@@ -1112,7 +1158,7 @@ export const EAMigrateProView: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="p-5 rounded-xl bg-slate-900/60 border border-white/10 space-y-3">
-              <h4 className="text-sm font-bold text-white font-orbitron flex items-center gap-2">
+              <h4 className="text-sm font-bold text-white font-display flex items-center gap-2">
                 <Shield className="w-4 h-4 text-cyan-400" />
                 <span>Pre-News Circuit Breaker</span>
               </h4>
@@ -1126,12 +1172,12 @@ export const EAMigrateProView: React.FC = () => {
             </div>
 
             <div className="p-5 rounded-xl bg-slate-900/60 border border-white/10 space-y-3">
-              <h4 className="text-sm font-bold text-white font-orbitron flex items-center gap-2">
-                <HardDrive className="w-4 h-4 text-purple-400" />
+              <h4 className="text-sm font-bold text-white font-display flex items-center gap-2">
+                <HardDrive className="w-4 h-4 text-sky-400" />
                 <span>Zero-Freeze Dedicated Cloud Buffer</span>
               </h4>
               <p className="text-xs text-slate-300 font-sans leading-relaxed">
-                When brokers push thousands of ticks per second during volatility spikes, home PCs and mobile MT5 apps frequently freeze. 
+                When brokers push thousands of ticks per second during volatility spikes, home PCs and mobile MT5 apps frequently freeze.
                 Our cloud nodes allocate a dedicated 100MB RAM stream buffer to absorb tick surges with zero frame drops.
               </p>
               <div className="p-3 rounded-lg bg-emerald-950/30 border border-emerald-500/30 text-xs text-emerald-300 font-mono">
@@ -1143,15 +1189,15 @@ export const EAMigrateProView: React.FC = () => {
       )}
 
       {/* =========================================================================
-          TAB 4: PRICING PLANS (As on eamigratepro.vercel.app: $39/mo VPS)
+          TAB 4: PRICING PLANS ($39/mo Sovereign Cloud VPS)
           ========================================================================= */}
       {activeTab === 'PRICING' && (
         <div className="space-y-6">
           <div className="text-center max-w-xl mx-auto space-y-2">
-            <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 uppercase">
-              TRANSPARENT CLOUD PRICING
+            <span className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider">
+              {brand.brandName} · TRANSPARENT CLOUD PRICING
             </span>
-            <h2 className="text-2xl font-bold text-white font-orbitron">
+            <h2 className="text-2xl font-bold text-white font-display">
               Simple, High-Performance Hosting Plans
             </h2>
             <p className="text-xs text-slate-400 font-sans">
@@ -1161,11 +1207,11 @@ export const EAMigrateProView: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Plan 1: Cloud Starter */}
-            <div className="p-6 rounded-2xl bg-[#070b14] border border-white/10 space-y-5 flex flex-col justify-between">
+            <div className="p-6 rounded-2xl bg-[#0F141E] border border-white/[0.08] space-y-5 flex flex-col justify-between">
               <div>
                 <span className="text-xs uppercase font-bold text-slate-400">Cloud Starter</span>
                 <div className="mt-2 flex items-baseline gap-1">
-                  <span className="text-3xl font-extrabold text-white font-orbitron">$39</span>
+                  <span className="text-3xl font-extrabold text-white font-mono tabular-nums">$39</span>
                   <span className="text-xs text-slate-400">/ month</span>
                 </div>
                 <p className="text-xs text-slate-400 font-sans mt-2">
@@ -1196,22 +1242,21 @@ export const EAMigrateProView: React.FC = () => {
                   setActiveTab('WIZARD');
                   setWizardStep(1);
                 }}
-                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition"
+                className="w-full py-2.5 rounded-xl bg-[#161D2B] hover:bg-slate-800 border border-white/[0.08] text-white text-xs font-bold transition"
               >
                 Get Started ($39/mo)
               </button>
             </div>
 
             {/* Plan 2: Pro Trader (Highlighted) */}
-            <div className="p-6 rounded-2xl bg-gradient-to-b from-[#091224] to-[#070b14] border-2 border-cyan-400 shadow-2xl shadow-cyan-950/60 space-y-5 flex flex-col justify-between relative">
-              <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[10px] font-black bg-gradient-to-r from-cyan-400 to-emerald-400 text-slate-950 uppercase tracking-wider">
-                MOST POPULAR
-              </span>
-
+            <div className="p-6 rounded-2xl bg-[#161D2B] border border-cyan-400/60 space-y-5 flex flex-col justify-between">
               <div>
-                <span className="text-xs uppercase font-bold text-cyan-300">Pro Trader Cloud</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs uppercase font-bold text-cyan-300">Pro Trader Cloud</span>
+                  <span className="text-[11px] font-mono font-bold text-emerald-400">RECOMMENDED</span>
+                </div>
                 <div className="mt-2 flex items-baseline gap-1">
-                  <span className="text-3xl font-extrabold text-white font-orbitron">$69</span>
+                  <span className="text-3xl font-extrabold text-white font-mono tabular-nums">$69</span>
                   <span className="text-xs text-slate-400">/ month</span>
                 </div>
                 <p className="text-xs text-slate-300 font-sans mt-2">
@@ -1242,18 +1287,18 @@ export const EAMigrateProView: React.FC = () => {
                   setActiveTab('WIZARD');
                   setWizardStep(1);
                 }}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-400 hover:from-cyan-400 hover:to-emerald-300 text-slate-950 text-xs font-black font-orbitron uppercase tracking-wider transition shadow-lg shadow-cyan-500/30"
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-400 hover:from-cyan-400 hover:to-emerald-300 text-slate-950 text-xs font-bold uppercase tracking-wider transition shadow-lg shadow-cyan-500/30"
               >
                 Deploy Pro Trader ($69/mo)
               </button>
             </div>
 
             {/* Plan 3: Mentor / Fleet Tier */}
-            <div className="p-6 rounded-2xl bg-[#070b14] border border-white/10 space-y-5 flex flex-col justify-between">
+            <div className="p-6 rounded-2xl bg-[#0F141E] border border-white/[0.08] space-y-5 flex flex-col justify-between">
               <div>
-                <span className="text-xs uppercase font-bold text-purple-400">Mentor Fleet Master</span>
+                <span className="text-xs uppercase font-bold text-amber-400">Mentor Fleet Master</span>
                 <div className="mt-2 flex items-baseline gap-1">
-                  <span className="text-3xl font-extrabold text-white font-orbitron">$149</span>
+                  <span className="text-3xl font-extrabold text-white font-mono tabular-nums">$149</span>
                   <span className="text-xs text-slate-400">/ month</span>
                 </div>
                 <p className="text-xs text-slate-400 font-sans mt-2">
@@ -1262,19 +1307,19 @@ export const EAMigrateProView: React.FC = () => {
 
                 <ul className="mt-4 space-y-2.5 text-xs text-slate-300">
                   <li className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-purple-400" /> <strong>10 Cloud Terminals</strong>
+                    <Check className="w-3.5 h-3.5 text-amber-400" /> <strong>10 Cloud Terminals</strong>
                   </li>
                   <li className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-purple-400" /> Remote .set Preset Distributor
+                    <Check className="w-3.5 h-3.5 text-amber-400" /> Remote .set Preset Distributor
                   </li>
                   <li className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-purple-400" /> Client Mobile Activation Keys
+                    <Check className="w-3.5 h-3.5 text-amber-400" /> Client Mobile Activation Keys
                   </li>
                   <li className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-purple-400" /> White-Label Mobile App Branding
+                    <Check className="w-3.5 h-3.5 text-amber-400" /> White-Label Mobile App Branding
                   </li>
                   <li className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-purple-400" /> Dedicated IP &amp; Super Admin Console
+                    <Check className="w-3.5 h-3.5 text-amber-400" /> Dedicated IP &amp; Super Admin Console
                   </li>
                 </ul>
               </div>
@@ -1284,7 +1329,7 @@ export const EAMigrateProView: React.FC = () => {
                   setActiveTab('WIZARD');
                   setWizardStep(1);
                 }}
-                className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition"
+                className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition"
               >
                 Launch Fleet Tier ($149/mo)
               </button>
@@ -1297,10 +1342,10 @@ export const EAMigrateProView: React.FC = () => {
           TAB 5: BROKER LATENCY MATCHING BENCHMARK
           ========================================================================= */}
       {activeTab === 'LATENCY_TEST' && (
-        <div className="rounded-2xl bg-[#070b14] border border-cyan-500/20 p-6 shadow-xl space-y-5">
-          <div className="border-b border-white/10 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="rounded-2xl bg-[#0F141E] border border-white/[0.08] p-6 space-y-5">
+          <div className="border-b border-white/[0.08] pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="text-base font-bold text-white font-orbitron flex items-center gap-2">
+              <h3 className="text-base font-bold text-white font-display flex items-center gap-2">
                 <Activity className="w-4 h-4 text-emerald-400" />
                 <span>Real-Time Bridge &amp; Broker RTT Probe</span>
               </h3>
@@ -1362,15 +1407,15 @@ export const EAMigrateProView: React.FC = () => {
           ========================================================================= */}
       {deploySuccessModal && newlyCreatedTerminal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 font-mono animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-[#0a0f1d] border border-cyan-400/60 rounded-3xl p-6 shadow-2xl space-y-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-emerald-400 p-[2px] mx-auto shadow-xl shadow-cyan-500/30">
-              <div className="w-full h-full bg-[#080d19] rounded-[14px] flex items-center justify-center text-cyan-400">
+          <div className="w-full max-w-md bg-[#0F141E] border border-cyan-400/50 rounded-2xl p-6 space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-emerald-400 p-[2px] mx-auto">
+              <div className="w-full h-full bg-[#090C12] rounded-[14px] flex items-center justify-center text-cyan-400">
                 <CheckCheck className="w-7 h-7" />
               </div>
             </div>
 
             <div className="text-center space-y-1">
-              <h3 className="text-lg font-bold text-white font-orbitron">
+              <h3 className="text-lg font-bold text-white font-display">
                 EA Successfully Migrated to Cloud!
               </h3>
               <p className="text-xs text-slate-300 font-sans">
@@ -1378,7 +1423,7 @@ export const EAMigrateProView: React.FC = () => {
               </p>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-slate-900/80 border border-white/10 space-y-2 text-xs font-mono">
+            <div className="p-3.5 rounded-xl bg-[#161D2B] border border-white/[0.08] space-y-2 text-xs font-mono">
               <div className="flex justify-between">
                 <span className="text-slate-400">Instance ID:</span>
                 <span className="text-cyan-300 font-bold">{newlyCreatedTerminal.id}</span>
@@ -1393,7 +1438,7 @@ export const EAMigrateProView: React.FC = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Mobile Key:</span>
-                <code className="text-purple-300 font-bold">{newlyCreatedTerminal.mobileSyncKey}</code>
+                <code className="text-amber-300 font-bold">{newlyCreatedTerminal.mobileSyncKey}</code>
               </div>
             </div>
 
@@ -1403,7 +1448,7 @@ export const EAMigrateProView: React.FC = () => {
                   setDeploySuccessModal(false);
                   setActiveTab('FLEET');
                 }}
-                className="flex-1 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold font-orbitron uppercase tracking-wider transition shadow-lg shadow-cyan-500/20"
+                className="flex-1 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold uppercase tracking-wider transition shadow-lg shadow-cyan-500/20"
               >
                 View in Cloud Fleet
               </button>
